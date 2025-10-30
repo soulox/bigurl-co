@@ -38,7 +38,7 @@ export class DataStore {
   }
 
   getOriginalUrlByCode(code: string): string | undefined {
-    const stmt = this.db.prepare<{ original_url: string }>(
+    const stmt = this.db.prepare(
       'SELECT original_url FROM links WHERE short_code = ? AND is_active = 1'
     );
     const row = stmt.get(code) as { original_url?: string } | undefined;
