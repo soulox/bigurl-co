@@ -1,7 +1,7 @@
 import type { ShortLink } from "@/types";
 
 export async function createShortLink(input: { url: string; customSlug?: string }): Promise<ShortLink> {
-  const res = await fetch("/api/api/shorten", {
+  const res = await fetch("/api/shorten", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
