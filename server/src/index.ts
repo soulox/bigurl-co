@@ -1,8 +1,8 @@
 import { Hono } from 'hono';
 import { serve } from '@hono/node-server';
 import { cors } from 'hono/cors';
-import { DataStore } from './db';
-import { generateUniqueCode, randomAlphaNum } from './util';
+import { DataStore } from './db.js';
+import { generateUniqueCode, randomAlphaNum } from './util.js';
 import { LRUCache } from 'lru-cache';
 
 const PORT = Number(process.env.PORT || 3000);
