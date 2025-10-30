@@ -1,0 +1,21 @@
+{
+  "name": "bigurl-workers",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev src/index.ts",
+    "deploy": "wrangler deploy"
+  },
+  "dependencies": {
+    "hono": "4.6.9"
+  },
+  "devDependencies": {
+    "wrangler": "4.21.x",
+    "typescript": "5.8.3"
+  }
+}
+
+
+
+

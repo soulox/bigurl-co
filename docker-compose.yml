@@ -1,0 +1,68 @@
+version: "3.9"
+services:
+  server:
+    build: ./server
+    image: bigurl/server
+    environment:
+      - PORT=3000
+      - DB_PATH=/data/links.db
+    volumes:
+      - server-data:/data
+    ports:
+      - "3000:3000"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+  next:
+    build: .
+    image: bigurl/next
+    environment:
+      - WORKER_BASE_URL=http://server:3000
+    ports:
+      - "3001:3000"
+    depends_on:
+      - server
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000 || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:stable
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - nginx-cache:/var/cache/nginx
+      - ./certbot/www:/var/www/html
+      - ./certbot/conf:/etc/letsencrypt
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - server
+      - next
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+  certbot:
+    image: certbot/certbot:latest
+    volumes:
+      - ./certbot/www:/var/www/html
+      - ./certbot/conf:/etc/letsencrypt
+    entrypoint: ["/bin/sh", "-c"]
+    command: "echo 'Run certbot manually with the instructions in docs/DEPLOY.md' && sleep infinity"
+
+volumes:
+  server-data:
+  nginx-cache:
+
+

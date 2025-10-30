@@ -1,0 +1,625 @@
+# URL Shortener App - Cursor Rules
+
+## Project Overview
+Build a modern, clean URL shortener application similar to Bitly or goto.tools, hosted on Cloudflare Workers with a React frontend. Features include custom short URLs, analytics, QR codes, and link management.
+
+## Tech Stack
+
+### Frontend
+- **Framework**: Next.js 15 (App Router) OR Remix
+- **Language**: TypeScript (strict mode)
+- **Styling**: Tailwind CSS v4
+- **UI Components**: shadcn/ui
+- **Icons**: lucide-react
+- **QR Generation**: qrcode.react
+- **State**: React hooks + TanStack Query (React Query)
+
+### Backend (Cloudflare Workers)
+- **Runtime**: Cloudflare Workers (with Hono framework)
+- **Database**: Cloudflare D1 (SQLite)
+- **Cache**: Cloudflare KV (for fast redirects)
+- **Storage**: Cloudflare R2 (for QR codes, optional)
+- **Analytics**: Cloudflare Analytics Engine
+- **Deployment**: Wrangler CLI
+
+### Alternative Stack (Full Cloudflare)
+- **Frontend**: Cloudflare Pages (React/Vite)
+- **Backend**: Cloudflare Workers
+- **Router**: Hono (fastest edge framework)
+
+## Core Functionality
+
+### URL Shortening
+1. **Input Validation**
+   - Validate URL format (including http/https)
+   - Check for malicious/phishing URLs
+   - Sanitize input
+   - Maximum URL length: 2048 characters
+
+2. **Short Code Generation**
+   - Auto-generate: 6-8 character alphanumeric codes
+   - Custom slugs: User-defined short codes (optional)
+   - Collision detection
+   - Reserved keywords blacklist (admin, api, dashboard, etc.)
+
+3. **Link Options**
+   - Expiration date (1 day, 7 days, 30 days, never)
+   - Password protection (optional)
+   - Max click limit
+   - Custom description/title
+
+### Link Management Dashboard
+- View all shortened links
+- Search and filter links
+- Edit/update destination URLs
+- Delete links
+- Bulk operations
+- Archive inactive links
+
+### Analytics & Tracking
+Track per shortened URL:
+- Total clicks
+- Unique visitors (IP-based or cookie-based)
+- Geographic location (country, city)
+- Referrer sources
+- Device types (mobile, desktop, tablet)
+- Browser and OS
+- Time-series click data (hourly, daily, weekly)
+- Top performing links
+
+### Additional Features
+- **QR Code Generation**: Auto-generate QR codes for each short URL
+- **Link Preview**: Show preview card with title/description
+- **Browser Extension**: Quick shorten from context menu (Phase 2)
+- **API Access**: RESTful API with rate limiting
+- **Teams/Workspaces**: Multi-user support (Phase 3)
+
+## Design Principles
+
+### Visual Design
+- **Minimalist Interface**: Focus on the input field as hero element
+- **Color System**:
+  - Primary: Blue (#3B82F6) for CTAs
+  - Success: Green for successful shortening
+  - Gray scale for UI elements
+  - Accent colors for analytics graphs
+- **Typography**: Clear hierarchy, readable font sizes
+- **Cards**: Rounded corners, subtle shadows for depth
+- **Dark Mode**: Full support with smooth transitions
+- **Responsive**: Mobile-first, works beautifully on all devices
+
+### UX Guidelines
+- **One-Click Copy**: Copy button prominently displayed
+- **Instant Feedback**: Show success states immediately
+- **Progressive Enhancement**: Works without JavaScript (basic)
+- **Zero-Click Preview**: Show link details on hover
+- **Keyboard Shortcuts**: Ctrl+K for quick shorten, Esc to close modals
+- **Loading States**: Skeleton loaders for analytics
+- **Error Recovery**: Clear error messages with retry options
+
+## Project Structure
+
+```
+├── frontend/
+│   ├── app/
+│   │   ├── layout.tsx
+│   │   ├── page.tsx              # Homepage with shortener
+│   │   ├── [shortCode]/
+│   │   │   └── page.tsx          # Redirect page
+│   │   ├── dashboard/
+│   │   │   ├── page.tsx          # Links dashboard
+│   │   │   └── [id]/
+│   │   │       └── page.tsx      # Analytics page
+│   │   └── api/
+│   │       └── [...proxy]/
+│   │           └── route.ts      # Proxy to Workers
+│   ├── components/
+│   │   ├── ui/                   # shadcn components
+│   │   ├── URLShortener.tsx     # Main shortener form
+│   │   ├── ShortLinkCard.tsx    # Result display
+│   │   ├── LinksList.tsx        # Dashboard list
+│   │   ├── AnalyticsChart.tsx   # Charts and graphs
+│   │   ├── QRCodeModal.tsx      # QR code display
+│   │   └── CopyButton.tsx       # Reusable copy button
+│   ├── lib/
+│   │   ├── api.ts               # API client
+│   │   ├── utils.ts
+│   │   └── validations.ts
+│   └── types/
+│       └── index.ts
+│
+├── workers/
+│   ├── src/
+│   │   ├── index.ts             # Main Worker entry
+│   │   ├── routes/
+│   │   │   ├── shorten.ts       # POST /shorten
+│   │   │   ├── redirect.ts      # GET /:code
+│   │   │   ├── links.ts         # GET/DELETE /links
+│   │   │   └── analytics.ts     # GET /analytics/:code
+│   │   ├── middleware/
+│   │   │   ├── auth.ts
+│   │   │   ├── rateLimit.ts
+│   │   │   └── validation.ts
+│   │   ├── services/
+│   │   │   ├── shortcode.ts     # Generate short codes
+│   │   │   ├── analytics.ts     # Track clicks
+│   │   │   └── security.ts      # URL validation
+│   │   └── db/
+│   │       └── schema.sql       # D1 schema
+│   ├── wrangler.toml
+│   └── package.json
+│
+└── shared/
+    └── types/
+        └── api.ts               # Shared TypeScript types
+```
+
+## Database Schema (Cloudflare D1)
+
+```sql
+-- Links table
+CREATE TABLE links (
+  id TEXT PRIMARY KEY,
+  short_code TEXT UNIQUE NOT NULL,
+  original_url TEXT NOT NULL,
+  title TEXT,
+  description TEXT,
+  created_at INTEGER NOT NULL,
+  expires_at INTEGER,
+  password_hash TEXT,
+  max_clicks INTEGER,
+  click_count INTEGER DEFAULT 0,
+  user_id TEXT,
+  is_active BOOLEAN DEFAULT 1,
+  custom_domain TEXT
+);
+
+CREATE INDEX idx_short_code ON links(short_code);
+CREATE INDEX idx_user_id ON links(user_id);
+CREATE INDEX idx_created_at ON links(created_at);
+
+-- Analytics table
+CREATE TABLE clicks (
+  id TEXT PRIMARY KEY,
+  link_id TEXT NOT NULL,
+  clicked_at INTEGER NOT NULL,
+  ip_address TEXT,
+  country TEXT,
+  city TEXT,
+  referrer TEXT,
+  user_agent TEXT,
+  device_type TEXT,
+  browser TEXT,
+  os TEXT,
+  FOREIGN KEY (link_id) REFERENCES links(id)
+);
+
+CREATE INDEX idx_link_id ON clicks(link_id);
+CREATE INDEX idx_clicked_at ON clicks(clicked_at);
+
+-- Users table (optional, for auth)
+CREATE TABLE users (
+  id TEXT PRIMARY KEY,
+  email TEXT UNIQUE NOT NULL,
+  created_at INTEGER NOT NULL,
+  api_key TEXT UNIQUE
+);
+```
+
+## Cloudflare Workers Implementation
+
+### Main Worker (Hono)
+
+```typescript
+import { Hono } from 'hono';
+import { cors } from 'hono/cors';
+import { cache } from 'hono/cache';
+import { rateLimiter } from './middleware/rateLimit';
+
+type Bindings = {
+  DB: D1Database;
+  KV: KVNamespace;
+  ANALYTICS: AnalyticsEngineDataset;
+};
+
+const app = new Hono<{ Bindings: Bindings }>();
+
+// Middleware
+app.use('*', cors());
+app.use('/api/*', rateLimiter());
+
+// Health check
+app.get('/health', (c) => c.json({ status: 'ok' }));
+
+// Shorten URL
+app.post('/api/shorten', async (c) => {
+  const { url, customSlug, expiresIn } = await c.req.json();
+  
+  // Validate URL
+  // Generate or use custom short code
+  // Store in D1 and KV
+  // Return shortened URL
+  
+  return c.json({ shortUrl, qrCode });
+});
+
+// Redirect
+app.get('/:code', cache({ cacheName: 'redirects', cacheControl: 'max-age=3600' }), async (c) => {
+  const code = c.req.param('code');
+  
+  // Check KV cache first
+  let url = await c.env.KV.get(`short:${code}`);
+  
+  if (!url) {
+    // Fallback to D1
+    const result = await c.env.DB
+      .prepare('SELECT original_url FROM links WHERE short_code = ? AND is_active = 1')
+      .bind(code)
+      .first();
+    
+    if (!result) {
+      return c.notFound();
+    }
+    
+    url = result.original_url;
+    // Cache for next time
+    await c.env.KV.put(`short:${code}`, url, { expirationTtl: 3600 });
+  }
+  
+  // Track analytics (async, don't block redirect)
+  c.executionCtx.waitUntil(trackClick(c, code));
+  
+  return c.redirect(url, 301);
+});
+
+// Analytics
+app.get('/api/analytics/:code', async (c) => {
+  // Fetch analytics data from D1
+  // Return aggregated statistics
+});
+
+export default app;
+```
+
+### Short Code Generator
+
+```typescript
+export function generateShortCode(length: number = 7): string {
+  const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let code = '';
+  
+  // Use crypto.getRandomValues for better randomness
+  const randomValues = new Uint8Array(length);
+  crypto.getRandomValues(randomValues);
+  
+  for (let i = 0; i < length; i++) {
+    code += chars[randomValues[i] % chars.length];
+  }
+  
+  return code;
+}
+
+export async function generateUniqueCode(db: D1Database): Promise<string> {
+  let attempts = 0;
+  const maxAttempts = 10;
+  
+  while (attempts < maxAttempts) {
+    const code = generateShortCode();
+    
+    // Check if code exists
+    const exists = await db
+      .prepare('SELECT 1 FROM links WHERE short_code = ?')
+      .bind(code)
+      .first();
+    
+    if (!exists) {
+      return code;
+    }
+    
+    attempts++;
+  }
+  
+  // Use longer code if collision persists
+  return generateShortCode(10);
+}
+```
+
+## Frontend Components
+
+### URL Shortener Form
+
+```typescript
+'use client';
+
+import { useState } from 'react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Card } from '@/components/ui/card';
+import { Link2, Loader2 } from 'lucide-react';
+
+export function URLShortener() {
+  const [url, setUrl] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [result, setResult] = useState<ShortLink | null>(null);
+
+  const handleShorten = async () => {
+    setIsLoading(true);
+    try {
+      const response = await fetch('/api/shorten', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url }),
+      });
+      
+      const data = await response.json();
+      setResult(data);
+    } catch (error) {
+      // Handle error
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <Card className="p-8 max-w-2xl mx-auto">
+      <div className="space-y-4">
+        <div className="flex gap-2">
+          <Input
+            type="url"
+            placeholder="Enter your long URL here..."
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            className="flex-1 text-lg"
+          />
+          <Button 
+            onClick={handleShorten} 
+            disabled={isLoading || !url}
+            size="lg"
+          >
+            {isLoading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Link2 className="h-4 w-4" />
+            )}
+            Shorten
+          </Button>
+        </div>
+        
+        {result && <ShortLinkCard link={result} />}
+      </div>
+    </Card>
+  );
+}
+```
+
+## API Endpoints
+
+### REST API Structure
+
+```
+POST   /api/shorten              # Create short URL
+GET    /api/links                # List user's links
+GET    /api/links/:id            # Get link details
+PUT    /api/links/:id            # Update link
+DELETE /api/links/:id            # Delete link
+GET    /api/analytics/:code      # Get link analytics
+GET    /:code                    # Redirect to original URL
+GET    /:code/preview            # Preview link info
+GET    /:code/qr                 # Get QR code
+```
+
+### Rate Limiting
+- Anonymous: 10 requests/minute per IP
+- Authenticated: 100 requests/minute per API key
+- Use Cloudflare Workers KV for rate limit tracking
+
+## Security Considerations
+
+### URL Validation
+```typescript
+export function isValidUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    // Only allow http and https
+    if (!['http:', 'https:'].includes(parsed.protocol)) {
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function isPhishingUrl(url: string): Promise<boolean> {
+  // Check against Google Safe Browsing API
+  // or maintain a blacklist in KV
+  const blacklistedDomains = ['suspicious.com', 'phishing.net'];
+  const domain = new URL(url).hostname;
+  return blacklistedDomains.includes(domain);
+}
+```
+
+### Password Protection
+```typescript
+import { hash, compare } from 'bcryptjs';
+
+export async function hashPassword(password: string): Promise<string> {
+  return await hash(password, 10);
+}
+
+export async function verifyPassword(
+  password: string, 
+  hash: string
+): Promise<boolean> {
+  return await compare(password, hash);
+}
+```
+
+## Analytics Implementation
+
+### Click Tracking
+```typescript
+async function trackClick(
+  c: Context,
+  shortCode: string
+): Promise<void> {
+  const request = c.req.raw;
+  const userAgent = request.headers.get('user-agent') || '';
+  const cfData = request.cf;
+  
+  const clickData = {
+    link_id: shortCode,
+    clicked_at: Date.now(),
+    country: cfData?.country || 'Unknown',
+    city: cfData?.city || 'Unknown',
+    ip_address: request.headers.get('cf-connecting-ip'),
+    referrer: request.headers.get('referer') || 'Direct',
+    user_agent: userAgent,
+    device_type: getDeviceType(userAgent),
+    browser: getBrowser(userAgent),
+    os: getOS(userAgent),
+  };
+  
+  // Store in D1
+  await c.env.DB
+    .prepare('INSERT INTO clicks VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+    .bind(...Object.values(clickData))
+    .run();
+  
+  // Also write to Analytics Engine for real-time queries
+  c.env.ANALYTICS.writeDataPoint({
+    blobs: [shortCode, clickData.country],
+    doubles: [1],
+    indexes: [shortCode],
+  });
+  
+  // Increment click counter
+  await c.env.DB
+    .prepare('UPDATE links SET click_count = click_count + 1 WHERE short_code = ?')
+    .bind(shortCode)
+    .run();
+}
+```
+
+## Deployment (Cloudflare)
+
+### wrangler.toml
+```toml
+name = "url-shortener"
+main = "src/index.ts"
+compatibility_date = "2024-10-01"
+
+[[ d1_databases ]]
+binding = "DB"
+database_name = "url_shortener_db"
+database_id = "your-database-id"
+
+[[ kv_namespaces ]]
+binding = "KV"
+id = "your-kv-id"
+
+[[ analytics_engine_datasets ]]
+binding = "ANALYTICS"
+
+[[ r2_buckets ]]
+binding = "QR_CODES"
+bucket_name = "qr-codes"
+```
+
+### Deployment Commands
+```bash
+# Install Wrangler
+npm install -g wrangler
+
+# Login to Cloudflare
+wrangler login
+
+# Create D1 database
+wrangler d1 create url_shortener_db
+
+# Run migrations
+wrangler d1 execute url_shortener_db --file=./schema.sql
+
+# Deploy worker
+wrangler deploy
+
+# Deploy frontend to Pages
+wrangler pages deploy ./frontend/out
+```
+
+## Features Roadmap
+
+### Phase 1 (MVP)
+- [ ] URL shortening (auto & custom)
+- [ ] Basic redirect functionality
+- [ ] Simple dashboard
+- [ ] Click counting
+- [ ] QR code generation
+
+### Phase 2
+- [ ] Advanced analytics
+- [ ] Link expiration
+- [ ] Password protection
+- [ ] Custom domains
+- [ ] API with rate limiting
+
+### Phase 3
+- [ ] User authentication
+- [ ] Teams/workspaces
+- [ ] Link folders/tags
+- [ ] Browser extension
+- [ ] Webhook integrations
+- [ ] A/B testing (multiple destinations)
+
+## Performance Optimization
+
+### Caching Strategy
+- KV for redirect lookups (3600s TTL)
+- Browser caching for static assets
+- CDN caching for redirects
+- Preload popular links
+
+### Edge Computing Benefits
+- Global distribution via Cloudflare's network
+- Sub-10ms redirect times
+- Automatic scaling
+- DDoS protection included
+
+## Monitoring & Observability
+- Cloudflare Workers Analytics for request metrics
+- Custom logging to D1 for errors
+- Set up alerts for:
+  - High error rates
+  - Unusual traffic patterns
+  - Database connection issues
+  - Rate limit violations
+
+## Best Practices
+
+### Code Quality
+- TypeScript strict mode everywhere
+- Comprehensive error handling
+- Input validation on both frontend and backend
+- Write tests for critical paths
+- Use Zod for runtime schema validation
+
+### User Experience
+- Instant feedback on actions
+- Graceful degradation
+- Offline support (service worker)
+- Preload critical resources
+- Optimize for Core Web Vitals
+
+### Security
+- Sanitize all inputs
+- Implement CSRF protection
+- Use Content Security Policy
+- Regular security audits
+- Keep dependencies updated
+
+## Testing Strategy
+- Unit tests for utilities and services
+- Integration tests for API endpoints
+- E2E tests for critical flows
+- Load testing for redirect performance
+- Test with various URL formats and edge cases
