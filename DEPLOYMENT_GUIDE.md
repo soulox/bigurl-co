@@ -1,31 +1,25 @@
 # Deployment Guide for New Features
 
-This guide will help you deploy the new analytics, QR code, and link management features.
+This guide will help you deploy the new analytics, QR code, and link management features to your self-hosted server.
 
 ## Prerequisites
 
-- Cloudflare account with:
-  - D1 database created
-  - KV namespace created
-  - Analytics Engine enabled
-  - Workers enabled
+- Docker and Docker Compose installed
+- Your server with nginx configured
+- Node.js 20+ (for local development)
 
 ## Step 1: Database Schema
 
-The database schema is already defined in `workers/src/db/schema.sql`. If you haven't run it yet, or need to verify:
+The database schema is automatically applied when the server starts! The `DataStore` class in `server/src/db.ts` uses `CREATE TABLE IF NOT EXISTS`, so:
 
-```bash
-# Apply the schema to your D1 database
-wrangler d1 execute bigurl_db --file=workers/src/db/schema.sql
-
-# Or if you need to update an existing database, the schema is backward compatible
-# All new columns have defaults or allow NULL
-```
+- **New installations**: Tables will be created automatically
+- **Existing installations**: New columns will be added automatically using SQLite's `ALTER TABLE` compatibility
 
 The schema includes:
 - `links` table with all necessary columns (title, description, expires_at, max_clicks, etc.)
-- `clicks` table with detailed analytics columns
+- `clicks` table with detailed analytics columns  
 - Proper indexes for performance
+- Foreign key constraints with CASCADE delete
 
 ## Step 2: Install Dependencies
 
@@ -37,84 +31,75 @@ npm install
 
 This will install `qrcode.react` which is needed for QR code generation.
 
-## Step 3: Configure Wrangler
+## Step 3: Review Configuration
 
-Ensure your `workers/wrangler.toml` is properly configured:
+Your `docker-compose.yml` is already set up correctly. The server will use:
 
-```toml
-name = "bigurl-workers"
-main = "src/index.ts"
-compatibility_date = "2024-10-01"
+- **SQLite database**: Stored in `/data/links.db` (persisted via Docker volume)
+- **LRU Cache**: In-memory cache for fast redirects (100k items, 1-hour TTL)
+- **Port 3000**: Backend server port
+- **Port 3001**: Next.js frontend port  
+- **Ports 80/443**: Nginx reverse proxy
 
-[[d1_databases]]
-binding = "DB"
-database_name = "bigurl_db"
-database_id = "YOUR_D1_DATABASE_ID"  # Replace with your actual ID
+No additional configuration needed!
 
-[[kv_namespaces]]
-binding = "KV"
-id = "YOUR_KV_NAMESPACE_ID"  # Replace with your actual ID
+## Step 4: Build Server
 
-[[analytics_engine_datasets]]
-binding = "ANALYTICS"
-```
-
-## Step 4: Test Locally
-
-Test the workers locally:
+Build the TypeScript server:
 
 ```bash
-cd workers
-npm run dev
+cd server
+npm install
+npm run build
+cd ..
 ```
 
-Test the Next.js frontend:
+Build the Next.js frontend:
 
 ```bash
-npm run dev
+npm install
+npm run build
 ```
 
-Visit:
-- Homepage: http://localhost:3000
-- Dashboard: http://localhost:3000/dashboard
+## Step 5: Deploy with Docker
 
-## Step 5: Deploy Workers
-
-Deploy the updated workers with new API endpoints:
+Deploy using Docker Compose:
 
 ```bash
-cd workers
-npm run deploy
+# Build and start all services
+docker compose up -d --build
+
+# Check logs
+docker compose logs -f
+
+# Verify services are running
+docker compose ps
 ```
 
 This deploys:
-- Updated redirect logic with expiration/max clicks checking
-- Enhanced analytics tracking
-- New API endpoints:
-  - GET `/api/analytics/:code`
-  - GET `/api/links`
-  - GET `/api/links/:id`
-  - PUT `/api/links/:id`
-  - DELETE `/api/links/:id`
-  - POST `/api/links/bulk-delete`
-  - POST `/api/links/bulk-update`
-  - GET `/api/qr/:code`
+- **server**: Node.js backend with all new API endpoints
+  - GET `/api/analytics/:code` - Get link analytics
+  - GET `/api/links` - List all links
+  - GET `/api/links/:id` - Get single link
+  - PUT `/api/links/:id` - Update link
+  - DELETE `/api/links/:id` - Delete link
+  - POST `/api/links/bulk-delete` - Bulk delete
+  - POST `/api/links/bulk-update` - Bulk update
+  - GET `/api/qr/:code` - QR code data
+- **next**: Next.js frontend with dashboard
+- **nginx**: Reverse proxy with caching
 
-## Step 6: Deploy Frontend
+## Step 6: Access the Application
 
-Deploy the Next.js application:
+After deployment, access your application:
 
-```bash
-npm run build
-npm run deploy
-```
+- **HTTP**: http://your-domain.com
+- **HTTPS**: https://your-domain.com (after SSL setup)
 
-Or if using Cloudflare Pages:
-
-```bash
-# The build output will be in .vercel/output or .next depending on your setup
-# Follow your usual deployment process
-```
+The nginx reverse proxy routes:
+- `/` → Next.js frontend (port 3001)
+- `/api/*` → Backend server (port 3000)
+- `/:code` → Backend server for redirects (port 3000)
 
 ## Step 7: Verify Deployment
 
@@ -142,16 +127,44 @@ Or if using Cloudflare Pages:
 3. Click the max clicks link until it's disabled
 4. Verify proper error messages
 
+## Step 7: (Optional) Enable GeoIP in Nginx
+
+For country/city tracking, you can enable nginx GeoIP module:
+
+```bash
+# Install GeoIP module
+apt-get install nginx-module-geoip geoip-database
+
+# Add to nginx config
+load_module modules/ngx_http_geoip_module.so;
+
+http {
+    geoip_country /usr/share/GeoIP/GeoIP.dat;
+    geoip_city /usr/share/GeoIP/GeoIPCity.dat;
+    
+    # Set headers for backend
+    proxy_set_header X-GeoIP-Country $geoip_country_code;
+    proxy_set_header X-GeoIP-City $geoip_city;
+}
+```
+
 ## Troubleshooting
 
 ### Issue: Database errors
-**Solution:** Ensure schema is applied to D1 database. Run the schema file again - it uses `IF NOT EXISTS` so it's safe.
+**Solution:** The schema is auto-applied. If you have issues:
+```bash
+# Check database file
+docker compose exec server ls -lh /data/
+# Restart server to reinitialize
+docker compose restart server
+```
 
 ### Issue: Analytics not showing
-**Solution:** 
-- Verify Analytics Engine is enabled in Cloudflare dashboard
-- Check that the `ANALYTICS` binding is in wrangler.toml
-- Wait a few minutes - Analytics Engine can have a slight delay
+**Solution:**
+- Wait for some clicks to be tracked first
+- Check server logs: `docker compose logs server`
+- Verify clicks are being inserted: Check SQLite database
+- Analytics are tracked asynchronously - may take a few seconds
 
 ### Issue: QR codes not generating
 **Solution:**
@@ -161,76 +174,108 @@ Or if using Cloudflare Pages:
 
 ### Issue: Links not appearing in dashboard
 **Solution:**
-- Check that workers deployment was successful
-- Verify the API proxy route in Next.js is working
+- Check that all containers are running: `docker compose ps`
+- Verify backend is accessible: `curl http://localhost:3000/health`
 - Check browser network tab for API call errors
-- Ensure D1 database binding is correct
+- Review nginx logs: `docker compose logs nginx`
+- Ensure the proxy configuration in nginx is correct
 
 ### Issue: Bulk operations not working
 **Solution:**
 - Ensure you're selecting links with checkboxes
 - Check browser console for errors
-- Verify workers API is deployed and accessible
+- Verify backend API is responding: `curl http://localhost:3000/api/links`
 
-## Environment Variables
-
-If you're deploying to different environments, you may need to set:
-
+### Issue: Port conflicts
+**Solution:**
 ```bash
-# For development
-NEXT_PUBLIC_API_URL=http://localhost:8787
+# Check if ports are already in use
+netstat -tulpn | grep -E ':(80|443|3000|3001)'
 
-# For production (usually not needed as it uses relative URLs)
-# NEXT_PUBLIC_API_URL=https://your-worker.workers.dev
+# Change ports in docker-compose.yml if needed
+# Then restart
+docker compose down
+docker compose up -d
 ```
 
-## Database Migrations
+## Database Backup
 
-If you have existing data and the schema was updated:
+To backup your SQLite database:
 
 ```bash
-# Backup your database first!
-wrangler d1 backup create bigurl_db
+# Create backup
+docker compose exec server sqlite3 /data/links.db ".backup '/data/links-backup.db'"
 
-# Then apply schema (it's designed to be idempotent)
-wrangler d1 execute bigurl_db --file=workers/src/db/schema.sql
+# Or copy from volume
+docker compose exec server cp /data/links.db /data/links-backup-$(date +%Y%m%d).db
+
+# Download backup to host
+docker cp bigurl-server-1:/data/links-backup.db ./backups/
+```
+
+You can also use the provided backup script:
+```bash
+./scripts/backup-db.sh
 ```
 
 ## Performance Optimization
 
-### KV Cache
-The application uses KV for caching redirects with a 1-hour TTL. This is automatically managed.
+### LRU Cache
+The server uses an in-memory LRU cache:
+- **Capacity**: 100,000 entries
+- **TTL**: 1 hour
+- **Invalidation**: Automatic on link updates/deletes
 
-### Analytics Engine
-Analytics are written asynchronously using `waitUntil()` so they don't slow down redirects.
+### Nginx Caching
+Nginx caches redirects with `proxy_cache`:
+- Reduces database load
+- Sub-millisecond response times
+- Configured in `nginx/conf.d/app.conf`
 
 ### Database Indexes
 The schema includes indexes on:
-- `short_code` (for fast lookups)
-- `user_id` (for future multi-user support)
-- `created_at` (for sorting)
+- `short_code` (for fast redirect lookups)
+- `created_at` (for sorting in dashboard)
 - `link_id` in clicks table (for analytics queries)
+
+### SQLite Performance
+- **WAL mode**: Enabled for better concurrency
+- **In-memory temp store**: For faster queries
+- **Foreign keys**: Enforce data integrity
 
 ## Monitoring
 
 After deployment, monitor:
 
-1. **Workers Analytics** (Cloudflare dashboard)
-   - Request success rate
-   - Response times
-   - Error rates
+1. **Docker Container Health**
+   ```bash
+   docker compose ps
+   docker compose logs -f
+   docker stats
+   ```
 
-2. **D1 Database Usage**
-   - Query performance
-   - Storage usage
+2. **Server Performance**
+   ```bash
+   # Check server logs
+   docker compose logs server
+   
+   # Check nginx access logs
+   docker compose logs nginx | grep "GET /"
+   
+   # Monitor container resources
+   docker stats
+   ```
 
-3. **KV Usage**
-   - Read/write operations
-   - Cache hit rate
+3. **Database Size**
+   ```bash
+   docker compose exec server ls -lh /data/
+   docker compose exec server sqlite3 /data/links.db "SELECT COUNT(*) FROM links"
+   docker compose exec server sqlite3 /data/links.db "SELECT COUNT(*) FROM clicks"
+   ```
 
-4. **Analytics Engine Usage**
-   - Data points written
-   - Query performance
+4. **Application Health**
+   - Health endpoint: http://your-domain.com/health
+   - Should return `{"status":"ok"}`
 
 ## Next Steps
 
@@ -243,30 +288,56 @@ Consider implementing:
 - Webhook notifications
 - Export analytics to CSV
 
+## Local Development
+
+For local development without Docker:
+
+```bash
+# Terminal 1: Start backend
+cd server
+npm install
+npm run dev
+
+# Terminal 2: Start frontend
+npm install
+npm run dev
+
+# Access at:
+# - Frontend: http://localhost:3000
+# - Backend: http://localhost:3000 (proxied by Next.js)
+```
+
+## SSL/HTTPS Setup
+
+Follow the existing guide in `docs/DEPLOY.md` for SSL certificate setup with Let's Encrypt.
+
 ## Support
 
 If you encounter issues:
-1. Check Cloudflare Workers logs: `wrangler tail`
+1. Check container logs: `docker compose logs -f`
 2. Check browser console for frontend errors
-3. Verify all bindings in wrangler.toml
-4. Ensure all environment variables are set
+3. Verify all containers are running: `docker compose ps`
+4. Test backend directly: `curl http://localhost:3000/health`
 5. Review the FEATURES.md document for usage examples
 
 ---
 
 **Deployment Checklist:**
 
-- [ ] Database schema applied
-- [ ] Dependencies installed
-- [ ] Wrangler.toml configured with correct IDs
-- [ ] Workers deployed successfully
-- [ ] Frontend built and deployed
+- [ ] Dependencies installed (server + frontend)
+- [ ] Server built successfully
+- [ ] Frontend built successfully
+- [ ] Docker images built
+- [ ] All containers running
+- [ ] Database auto-created and accessible
 - [ ] Analytics tested and working
 - [ ] QR codes generating properly
 - [ ] Dashboard accessible
 - [ ] Bulk operations working
 - [ ] Expiration/max clicks tested
-- [ ] Monitoring set up
+- [ ] Nginx properly routing requests
+- [ ] SSL certificates configured (optional)
+- [ ] Backups configured
 
-Congratulations! Your enhanced URL shortener is now live! 🎉
+Congratulations! Your enhanced URL shortener is now live on your server! 🎉
 
