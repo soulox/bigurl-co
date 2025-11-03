@@ -62,107 +62,121 @@ export function URLShortener() {
   }
 
   return (
-    <div className="w-full max-w-2xl mx-auto">
-      <form onSubmit={onSubmit} className="flex flex-col gap-3">
-        <div className="flex gap-2">
-          <input
-            type="url"
-            placeholder="Enter your long URL..."
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            className="flex-1 px-3 py-3 rounded border border-black/10 dark:border-white/15 bg-transparent"
-            required
-          />
-          <button
-            type="submit"
-            disabled={loading || !url}
-            className="px-4 py-3 rounded bg-blue-500 text-white disabled:opacity-50 hover:bg-blue-600"
-          >
-            {loading ? "Shortening..." : "Shorten"}
-          </button>
-        </div>
-        <input
-          type="text"
-          placeholder="Custom slug (optional)"
-          value={customSlug}
-          onChange={(e) => setCustomSlug(e.target.value)}
-          className="px-3 py-2 rounded border border-black/10 dark:border-white/15 bg-transparent"
-        />
-
-        {/* Advanced Options Toggle */}
-        <button
-          type="button"
-          onClick={() => setShowAdvanced(!showAdvanced)}
-          className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
-        >
-          {showAdvanced ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-          Advanced Options
-        </button>
-
-        {/* Advanced Options */}
-        {showAdvanced && (
-          <div className="p-4 border border-gray-200 dark:border-gray-700 rounded space-y-3">
+    <div className="w-full max-w-3xl mx-auto">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-100 dark:border-gray-700 overflow-hidden">
+        <form onSubmit={onSubmit} className="p-6 sm:p-8">
+          <div className="flex flex-col sm:flex-row gap-3">
             <input
-              type="text"
-              placeholder="Title (optional)"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className="w-full px-3 py-2 rounded border border-black/10 dark:border-white/15 bg-transparent"
+              type="url"
+              placeholder="Paste your long URL here..."
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              className="flex-1 px-4 py-4 rounded-xl border-2 border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 focus:border-blue-500 dark:focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all text-lg"
+              required
             />
-            <textarea
-              placeholder="Description (optional)"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              className="w-full px-3 py-2 rounded border border-black/10 dark:border-white/15 bg-transparent"
-              rows={2}
-            />
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">
-                  Expires in (days)
-                </label>
-                <input
-                  type="number"
-                  placeholder="Never"
-                  value={expirationDays}
-                  onChange={(e) => setExpirationDays(e.target.value)}
-                  min="1"
-                  className="w-full px-3 py-2 rounded border border-black/10 dark:border-white/15 bg-transparent"
-                />
-              </div>
-              <div>
-                <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">
-                  Max clicks
-                </label>
-                <input
-                  type="number"
-                  placeholder="Unlimited"
-                  value={maxClicks}
-                  onChange={(e) => setMaxClicks(e.target.value)}
-                  min="1"
-                  className="w-full px-3 py-2 rounded border border-black/10 dark:border-white/15 bg-transparent"
-                />
-              </div>
-            </div>
-            <div className="text-xs text-gray-500 dark:text-gray-400">
-              <p>💡 Set expiration date or max clicks to automatically disable links</p>
-            </div>
+            <button
+              type="submit"
+              disabled={loading || !url}
+              className="px-8 py-4 rounded-xl bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg hover:shadow-xl transform hover:scale-105 disabled:transform-none text-lg whitespace-nowrap"
+            >
+              {loading ? (
+                <span className="flex items-center gap-2">
+                  <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  Shortening...
+                </span>
+              ) : (
+                "Shorten"
+              )}
+            </button>
           </div>
-        )}
-      </form>
+
+          <input
+            type="text"
+            placeholder="Custom slug (optional) - e.g., my-link"
+            value={customSlug}
+            onChange={(e) => setCustomSlug(e.target.value)}
+            className="mt-3 w-full px-4 py-3 rounded-xl border-2 border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 focus:border-blue-500 dark:focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all"
+          />
+
+          {/* Advanced Options Toggle */}
+          <button
+            type="button"
+            onClick={() => setShowAdvanced(!showAdvanced)}
+            className="mt-4 flex items-center gap-2 text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+          >
+            {showAdvanced ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            Advanced Options
+          </button>
+
+          {/* Advanced Options */}
+          {showAdvanced && (
+            <div className="mt-4 p-5 bg-gray-50 dark:bg-gray-900 rounded-xl border-2 border-gray-200 dark:border-gray-700 space-y-4 animate-in fade-in slide-in-from-top-2 duration-200">
+              <input
+                type="text"
+                placeholder="Title (optional)"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                className="w-full px-4 py-3 rounded-lg border-2 border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 focus:border-blue-500 dark:focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all"
+              />
+              <textarea
+                placeholder="Description (optional)"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                className="w-full px-4 py-3 rounded-lg border-2 border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 focus:border-blue-500 dark:focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all resize-none"
+                rows={3}
+              />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Expires in (days)
+                  </label>
+                  <input
+                    type="number"
+                    placeholder="Never expires"
+                    value={expirationDays}
+                    onChange={(e) => setExpirationDays(e.target.value)}
+                    min="1"
+                    className="w-full px-4 py-3 rounded-lg border-2 border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 focus:border-blue-500 dark:focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Max clicks
+                  </label>
+                  <input
+                    type="number"
+                    placeholder="Unlimited"
+                    value={maxClicks}
+                    onChange={(e) => setMaxClicks(e.target.value)}
+                    min="1"
+                    className="w-full px-4 py-3 rounded-lg border-2 border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 focus:border-blue-500 dark:focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all"
+                  />
+                </div>
+              </div>
+              <div className="flex items-start gap-2 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                <span className="text-blue-600 dark:text-blue-400 text-lg">💡</span>
+                <p className="text-xs text-blue-700 dark:text-blue-300">
+                  Set expiration date or max clicks to automatically disable links after a certain time or number of visits
+                </p>
+              </div>
+            </div>
+          )}
+        </form>
+      </div>
 
       {error && (
-        <div className="mt-3 p-3 rounded bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
-          <p className="text-red-600 dark:text-red-400 text-sm">{error}</p>
+        <div className="mt-6 p-4 rounded-xl bg-red-50 dark:bg-red-900/20 border-2 border-red-200 dark:border-red-800 animate-in fade-in slide-in-from-top-2 duration-200">
+          <p className="text-red-600 dark:text-red-400 text-sm font-medium">{error}</p>
         </div>
       )}
+      
       {result && (
-        <div className="mt-4">
+        <div className="mt-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
           {/* @ts-expect-error - component is typed */}
-          <div className="mt-2">
-            {/* Inline import to avoid circular refs */}
-            {require("./ShortLinkCard").ShortLinkCard({ link: result })}
-          </div>
+          {require("./ShortLinkCard").ShortLinkCard({ link: result })}
         </div>
       )}
     </div>

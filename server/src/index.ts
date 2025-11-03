@@ -73,57 +73,6 @@ app.post('/api/shorten', async (c: Context) => {
   return c.json({ id, shortCode, shortUrl });
 });
 
-app.get('/:code', async (c: Context) => {
-  const code = c.req.param('code');
-
-  // Check database for link (to validate expiration/max clicks)
-  let target = db.getOriginalUrlByCode(code);
-  if (!target) {
-    return c.json({ error: 'Link not found, expired, or max clicks reached' }, 410);
-  }
-
-  // Track analytics asynchronously
-  const link = db.getLinkByCode(code);
-  if (link) {
-    setImmediate(() => {
-      try {
-        const userAgent = c.req.header('user-agent') || '';
-        const referer = c.req.header('referer') || c.req.header('referrer') || '';
-        const ip = getClientIp(c);
-        const { deviceType, browser, os } = parseUserAgent(userAgent);
-        
-        // Get geo data from nginx headers if available
-        const country = c.req.header('x-geoip-country') || c.req.header('cf-ipcountry') || 'Unknown';
-        const city = c.req.header('x-geoip-city') || 'Unknown';
-
-        db.insertClick({
-          id: crypto.randomUUID(),
-          link_id: link.id,
-          clicked_at: Date.now(),
-          ip_address: ip,
-          country,
-          city,
-          referrer: referer,
-          user_agent: userAgent,
-          device_type: deviceType,
-          browser,
-          os
-        });
-
-        db.incrementClickCount(code);
-      } catch (err) {
-        console.error('Failed to track click:', err);
-      }
-    });
-  }
-
-  // Update cache
-  redirectCache.set(code, target, { ttl: 60 * 60 * 1000 });
-
-  // NGINX will cache this 301
-  return c.redirect(target, 301);
-});
-
 // Get all links
 app.get('/api/links', async (c: Context) => {
   const links = db.getAllLinks();
@@ -243,6 +192,58 @@ app.get('/api/qr/:code', async (c: Context) => {
     shortUrl,
     qrCodeUrl: `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodeURIComponent(shortUrl)}`
   });
+});
+
+// Short code redirect - MUST BE LAST to not override other routes
+app.get('/:code', async (c: Context) => {
+  const code = c.req.param('code');
+
+  // Check database for link (to validate expiration/max clicks)
+  let target = db.getOriginalUrlByCode(code);
+  if (!target) {
+    return c.json({ error: 'Link not found, expired, or max clicks reached' }, 410);
+  }
+
+  // Track analytics asynchronously
+  const link = db.getLinkByCode(code);
+  if (link) {
+    setImmediate(() => {
+      try {
+        const userAgent = c.req.header('user-agent') || '';
+        const referer = c.req.header('referer') || c.req.header('referrer') || '';
+        const ip = getClientIp(c);
+        const { deviceType, browser, os } = parseUserAgent(userAgent);
+        
+        // Get geo data from nginx headers if available
+        const country = c.req.header('x-geoip-country') || c.req.header('cf-ipcountry') || 'Unknown';
+        const city = c.req.header('x-geoip-city') || 'Unknown';
+
+        db.insertClick({
+          id: crypto.randomUUID(),
+          link_id: link.id,
+          clicked_at: Date.now(),
+          ip_address: ip,
+          country,
+          city,
+          referrer: referer,
+          user_agent: userAgent,
+          device_type: deviceType,
+          browser,
+          os
+        });
+
+        db.incrementClickCount(code);
+      } catch (err) {
+        console.error('Failed to track click:', err);
+      }
+    });
+  }
+
+  // Update cache
+  redirectCache.set(code, target, { ttl: 60 * 60 * 1000 });
+
+  // NGINX will cache this 301
+  return c.redirect(target, 301);
 });
 
 serve({ fetch: app.fetch, port: PORT }, (info: { port: number }) => {

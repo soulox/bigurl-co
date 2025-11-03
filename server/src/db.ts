@@ -117,17 +117,17 @@ export class DataStore {
 
   getOriginalUrlByCode(code: string): string | undefined {
     const stmt = this.db.prepare(
-      'SELECT original_url, expires_at, max_clicks, click_count FROM links WHERE short_code = ? AND is_active = 1'
+      'SELECT original_url, expires_at, max_clicks, COALESCE(click_count, 0) as click_count FROM links WHERE short_code = ? AND is_active = 1'
     );
-    const row = stmt.get(code) as { original_url?: string; expires_at?: number; max_clicks?: number; click_count?: number } | undefined;
+    const row = stmt.get(code) as { original_url?: string; expires_at?: number | null; max_clicks?: number | null; click_count: number } | undefined;
     
     if (!row) return undefined;
     
-    // Check expiration
-    if (row.expires_at && row.expires_at < Date.now()) return undefined;
+    // Check expiration (null/undefined means no expiration)
+    if (row.expires_at && row.expires_at > 0 && row.expires_at < Date.now()) return undefined;
     
-    // Check max clicks
-    if (row.max_clicks && row.click_count && row.click_count >= row.max_clicks) return undefined;
+    // Check max clicks (null/undefined means no limit)
+    if (row.max_clicks && row.max_clicks > 0 && row.click_count >= row.max_clicks) return undefined;
     
     return row.original_url;
   }
