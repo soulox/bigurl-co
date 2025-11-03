@@ -42,12 +42,6 @@ export function ShortLinkCard({ link }: { link: ShortLink }) {
             <QrCode className="w-4 h-4" />
             <span>QR Code</span>
           </button>
-          <a
-            href="/dashboard"
-            className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border-2 border-green-200 dark:border-green-800 text-green-700 dark:text-green-300 rounded-lg hover:bg-green-50 dark:hover:bg-green-900/30 transition-all font-medium"
-          >
-            <span>View in Dashboard</span>
-          </a>
         </div>
       </div>
       
