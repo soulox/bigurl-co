@@ -7,6 +7,7 @@ export class DataStore {
         this.ensureSchema();
     }
     ensureSchema() {
+        // Create tables if they don't exist
         this.db.exec(`
       CREATE TABLE IF NOT EXISTS links (
         id TEXT PRIMARY KEY,
@@ -40,6 +41,29 @@ export class DataStore {
       CREATE INDEX IF NOT EXISTS idx_link_id ON clicks(link_id);
       CREATE INDEX IF NOT EXISTS idx_clicked_at ON clicks(clicked_at);
     `);
+        // Migrate existing links table to add new columns if they don't exist
+        this.migrateLinksTable();
+    }
+    migrateLinksTable() {
+        // Get existing columns
+        const columns = this.db.prepare("PRAGMA table_info(links)").all();
+        const columnNames = columns.map(col => col.name);
+        // Add missing columns
+        const columnsToAdd = [
+            { name: 'title', type: 'TEXT' },
+            { name: 'description', type: 'TEXT' },
+            { name: 'expires_at', type: 'INTEGER' },
+            { name: 'max_clicks', type: 'INTEGER' },
+            { name: 'click_count', type: 'INTEGER DEFAULT 0' }
+        ];
+        for (const col of columnsToAdd) {
+            if (!columnNames.includes(col.name)) {
+                console.log(`Adding column ${col.name} to links table...`);
+                this.db.exec(`ALTER TABLE links ADD COLUMN ${col.name} ${col.type}`);
+            }
+        }
+        // Update click_count to 0 for existing rows where it's NULL
+        this.db.exec(`UPDATE links SET click_count = 0 WHERE click_count IS NULL`);
     }
     insertLink(row) {
         const stmt = this.db.prepare('INSERT INTO links (id, short_code, original_url, title, description, created_at, expires_at, max_clicks, is_active) VALUES (@id, @short_code, @original_url, @title, @description, @created_at, @expires_at, @max_clicks, @is_active)');
@@ -173,7 +197,7 @@ export class DataStore {
                 devices: Object.entries(devices).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count),
                 browsers: Object.entries(browsers).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count),
                 osTypes: Object.entries(osTypes).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count),
-                clicksByDay: Object.entries(clicksByDay).map(([date, count]) => ({ date, count })).sort((a, b) => a.localeCompare(b))
+                clicksByDay: Object.entries(clicksByDay).map(([date, count]) => ({ date, count })).sort((a, b) => a.date.localeCompare(b.date))
             },
             recentClicks: clicks.slice(0, 50)
         };

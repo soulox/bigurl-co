@@ -37,6 +37,7 @@ export class DataStore {
   }
 
   private ensureSchema(): void {
+    // Create tables if they don't exist
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS links (
         id TEXT PRIMARY KEY,
@@ -70,6 +71,34 @@ export class DataStore {
       CREATE INDEX IF NOT EXISTS idx_link_id ON clicks(link_id);
       CREATE INDEX IF NOT EXISTS idx_clicked_at ON clicks(clicked_at);
     `);
+
+    // Migrate existing links table to add new columns if they don't exist
+    this.migrateLinksTable();
+  }
+
+  private migrateLinksTable(): void {
+    // Get existing columns
+    const columns = this.db.prepare("PRAGMA table_info(links)").all() as Array<{ name: string }>;
+    const columnNames = columns.map(col => col.name);
+
+    // Add missing columns
+    const columnsToAdd = [
+      { name: 'title', type: 'TEXT' },
+      { name: 'description', type: 'TEXT' },
+      { name: 'expires_at', type: 'INTEGER' },
+      { name: 'max_clicks', type: 'INTEGER' },
+      { name: 'click_count', type: 'INTEGER DEFAULT 0' }
+    ];
+
+    for (const col of columnsToAdd) {
+      if (!columnNames.includes(col.name)) {
+        console.log(`Adding column ${col.name} to links table...`);
+        this.db.exec(`ALTER TABLE links ADD COLUMN ${col.name} ${col.type}`);
+      }
+    }
+
+    // Update click_count to 0 for existing rows where it's NULL
+    this.db.exec(`UPDATE links SET click_count = 0 WHERE click_count IS NULL`);
   }
 
   insertLink(row: LinkRow): void {
