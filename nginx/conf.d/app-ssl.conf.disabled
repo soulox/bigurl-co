@@ -37,6 +37,21 @@ server {
     add_header X-Cache-Status $upstream_cache_status;
   }
 
+  # Dashboard and other Next.js routes (must come before short code regex)
+  location /dashboard {
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto https;
+    proxy_pass http://next_app;
+
+    proxy_cache app_cache;
+    proxy_cache_bypass $bypass_cache;
+    proxy_no_cache $bypass_cache;
+    proxy_cache_valid 200 10m;
+    add_header X-Cache-Status $upstream_cache_status;
+  }
+
   location ~ ^/[A-Za-z0-9_-]+$ {
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
