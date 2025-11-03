@@ -19,8 +19,21 @@ export function URLShortener() {
     try {
       const data = await createShortLink({ url, customSlug: customSlug || undefined });
       setResult(data);
+      // Clear inputs on success
+      setUrl("");
+      setCustomSlug("");
     } catch (err: any) {
-      setError(err?.message || "Something went wrong");
+      console.error("Failed to shorten URL:", err);
+      // Better error messages
+      if (err?.message?.includes("409") || err?.message?.includes("already in use")) {
+        setError("This custom slug is already taken. Try a different one.");
+      } else if (err?.message?.includes("429")) {
+        setError("Too many requests. Please slow down and try again.");
+      } else if (err?.message?.includes("Failed to fetch") || err?.message?.includes("network")) {
+        setError("Network error. Check your connection and try again.");
+      } else {
+        setError(err?.message || "Failed to shorten URL. Please try again.");
+      }
     } finally {
       setLoading(false);
     }
@@ -55,7 +68,11 @@ export function URLShortener() {
         />
       </form>
 
-      {error && <p className="mt-3 text-red-600 dark:text-red-400">{error}</p>}
+      {error && (
+        <div className="mt-3 p-3 rounded bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
+          <p className="text-red-600 dark:text-red-400 text-sm">{error}</p>
+        </div>
+      )}
       {result && (
         <div className="mt-4">
           {/* @ts-expect-error - component is typed */}
