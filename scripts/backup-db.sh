@@ -23,9 +23,13 @@ if ! docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
   exit 1
 fi
 
-# SQLite checkpoint to ensure WAL is flushed
-echo "Checkpointing WAL..."
-docker exec "$CONTAINER_NAME" sqlite3 "$DB_PATH" "PRAGMA wal_checkpoint(TRUNCATE);" || true
+# SQLite checkpoint to ensure WAL is flushed (if sqlite3 is available in container)
+if docker exec "$CONTAINER_NAME" which sqlite3 > /dev/null 2>&1; then
+  echo "Checkpointing WAL..."
+  docker exec "$CONTAINER_NAME" sqlite3 "$DB_PATH" "PRAGMA wal_checkpoint(TRUNCATE);" || true
+else
+  echo "Skipping WAL checkpoint (sqlite3 not available in container, but backup will still work)"
+fi
 
 # Copy database files
 BACKUP_FILE="${BACKUP_DIR}/links_${TIMESTAMP}.db"
@@ -41,11 +45,15 @@ if [ -f "$BACKUP_FILE" ]; then
   SIZE=$(du -h "$BACKUP_FILE" | cut -f1)
   echo "Backup completed: ${BACKUP_FILE} (${SIZE})"
   
-  # Test integrity
-  if sqlite3 "$BACKUP_FILE" "PRAGMA integrity_check;" > /dev/null 2>&1; then
-    echo "Integrity check: OK"
+  # Test integrity (if sqlite3 is available on host)
+  if command -v sqlite3 > /dev/null 2>&1; then
+    if sqlite3 "$BACKUP_FILE" "PRAGMA integrity_check;" > /dev/null 2>&1; then
+      echo "Integrity check: OK"
+    else
+      echo "Warning: Integrity check failed" >&2
+    fi
   else
-    echo "Warning: Integrity check failed" >&2
+    echo "Skipping integrity check (install sqlite3 on host to enable: apt install sqlite3)"
   fi
 else
   echo "Error: Backup file not created" >&2
