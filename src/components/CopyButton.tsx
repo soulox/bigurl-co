@@ -6,7 +6,19 @@ export function CopyButton({ value }: { value: string }) {
   const [copied, setCopied] = useState(false);
 
   async function onCopy() {
-    await navigator.clipboard.writeText(value);
+    if (!navigator.clipboard) {
+      // Fallback for non-HTTPS (e.g. HTTP localhost)
+      const textArea = document.createElement("textarea");
+      textArea.value = value;
+      textArea.style.position = "fixed";
+      textArea.style.opacity = "0";
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textArea);
+    } else {
+      await navigator.clipboard.writeText(value);
+    }
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   }
