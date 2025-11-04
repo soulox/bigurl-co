@@ -1,20 +1,22 @@
+version: '3.3'
+
 services:
   server:
     build: ./server
     image: bigurl/server
     environment:
-      - PORT=3000
-      - DB_PATH=/data/links.db
-      - JWT_SECRET=${JWT_SECRET:-change-this-secret-key-min-32-chars}
-      - MAILGUN_API_KEY=${MAILGUN_API_KEY:-}
-      - MAILGUN_DOMAIN=${MAILGUN_DOMAIN:-}
-      - FROM_EMAIL=${FROM_EMAIL:-BigURL <noreply@bigurl.co>}
-      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@bigurl.co}
-      - NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL:-http://localhost:3001}
+      PORT: 3000
+      DB_PATH: /data/links.db
+      JWT_SECRET: change-this-secret-key-min-32-chars
+      MAILGUN_API_KEY: ""
+      MAILGUN_DOMAIN: ""
+      FROM_EMAIL: noreply@bigurl.co
+      ADMIN_EMAIL: admin@bigurl.co
+      NEXT_PUBLIC_APP_URL: http://localhost:3011
     volumes:
       - server-data:/data
     ports:
-      - "3000:3000"
+      - "3010:3000"
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:3000/health || exit 1"]
       interval: 30s
@@ -26,14 +28,14 @@ services:
     build: .
     image: bigurl/next
     environment:
-      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:3000}
-      - NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL:-http://localhost:3001}
-      - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3001}
-      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:-change-this-nextauth-secret}
-      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
-      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
+      NEXT_PUBLIC_API_URL: http://localhost:3010
+      NEXT_PUBLIC_APP_URL: http://localhost:3011
+      NEXTAUTH_URL: http://localhost:3011
+      NEXTAUTH_SECRET: change-this-nextauth-secret
+      GOOGLE_CLIENT_ID: ""
+      GOOGLE_CLIENT_SECRET: ""
     ports:
-      - "3001:3000"
+      - "3011:3000"
     depends_on:
       - server
     healthcheck:

@@ -41,6 +41,16 @@ export type ClickRow = {
   os?: string;
 };
 
+export type TransactionRow = {
+  id: string;
+  user_id: string;
+  package: 'basic' | 'pro';
+  amount: number;
+  transaction_id: string;
+  status: 'pending' | 'completed' | 'failed';
+  created_at: number;
+};
+
 export class DataStore {
   private db: Database.Database;
 
@@ -101,6 +111,19 @@ export class DataStore {
       );
       CREATE INDEX IF NOT EXISTS idx_link_id ON clicks(link_id);
       CREATE INDEX IF NOT EXISTS idx_clicked_at ON clicks(clicked_at);
+
+      CREATE TABLE IF NOT EXISTS transactions (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        package TEXT NOT NULL CHECK(package IN ('basic', 'pro')),
+        amount REAL NOT NULL,
+        transaction_id TEXT NOT NULL,
+        status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'completed', 'failed')),
+        created_at INTEGER NOT NULL,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_transaction_user_id ON transactions(user_id);
+      CREATE INDEX IF NOT EXISTS idx_transaction_created_at ON transactions(created_at);
     `);
 
     // Migrate existing tables to add new columns if they don't exist
@@ -546,6 +569,28 @@ export class DataStore {
       // If user_id column doesn't exist yet, assume ownership (migration scenario)
       return true;
     }
+  }
+
+  // Transaction Management
+
+  insertTransaction(transaction: TransactionRow): void {
+    const stmt = this.db.prepare(`
+      INSERT INTO transactions (id, user_id, package, amount, transaction_id, status, created_at)
+      VALUES (@id, @user_id, @package, @amount, @transaction_id, @status, @created_at)
+    `);
+    stmt.run(transaction);
+  }
+
+  getTransactionsByUser(userId: string): TransactionRow[] {
+    const stmt = this.db.prepare(`
+      SELECT * FROM transactions WHERE user_id = ? ORDER BY created_at DESC
+    `);
+    return stmt.all(userId) as TransactionRow[];
+  }
+
+  getTransactionById(id: string): TransactionRow | undefined {
+    const stmt = this.db.prepare('SELECT * FROM transactions WHERE id = ?');
+    return stmt.get(id) as TransactionRow | undefined;
   }
 }
 

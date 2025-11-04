@@ -1,6 +1,10 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
+import { Header } from "@/components/Header";
+import { Footer } from "@/components/Footer";
+import { CheckoutModal } from "@/components/CheckoutModal";
 import { Check, Zap } from "lucide-react";
 
 const plans = [
@@ -64,43 +68,33 @@ const plans = [
 ];
 
 export default function PricingPage() {
+  const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const [selectedPlan, setSelectedPlan] = useState<{ name: string; price: number } | null>(null);
+
+  const handleUpgrade = (planName: string, price: number) => {
+    const token = localStorage.getItem("auth_token");
+    if (!token) {
+      // Redirect to sign in if not logged in
+      window.location.href = "/auth/signin?mode=signup";
+      return;
+    }
+
+    setSelectedPlan({ name: planName.toLowerCase(), price: parseInt(price.replace("$", "")) });
+    setCheckoutOpen(true);
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
-      {/* Header */}
-      <header className="border-b border-gray-200 dark:border-gray-800 bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm sticky top-0 z-50">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
-            <Link href="/" className="flex items-center gap-2">
-              <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="24"
-                  height="24"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className="w-5 h-5 text-white"
-                >
-                  <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
-                  <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
-                </svg>
-              </div>
-              <span className="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-                BigURL
-              </span>
-            </Link>
-            <Link
-              href="/auth/signin"
-              className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
-            >
-              Sign In
-            </Link>
-          </div>
-        </div>
-      </header>
+      <Header />
+
+      {selectedPlan && (
+        <CheckoutModal
+          isOpen={checkoutOpen}
+          onClose={() => setCheckoutOpen(false)}
+          packageName={selectedPlan.name}
+          packagePrice={selectedPlan.price}
+        />
+      )}
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
         {/* Hero Section */}
@@ -159,16 +153,25 @@ export default function PricingPage() {
                 ))}
               </ul>
 
-              <Link
-                href="/auth/signin?mode=signup"
-                className={`block w-full py-3 rounded-lg font-semibold text-center transition-all shadow-lg hover:shadow-xl transform hover:scale-105 ${
-                  plan.popular
-                    ? "bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white"
-                    : "bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600"
-                }`}
-              >
-                {plan.cta}
-              </Link>
+              {plan.name === "Free" ? (
+                <Link
+                  href="/auth/signin?mode=signup"
+                  className="block w-full py-3 rounded-lg font-semibold text-center transition-all shadow-lg hover:shadow-xl transform hover:scale-105 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600"
+                >
+                  {plan.cta}
+                </Link>
+              ) : (
+                <button
+                  onClick={() => handleUpgrade(plan.name, plan.price)}
+                  className={`block w-full py-3 rounded-lg font-semibold text-center transition-all shadow-lg hover:shadow-xl transform hover:scale-105 ${
+                    plan.popular
+                      ? "bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white"
+                      : "bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600"
+                  }`}
+                >
+                  {plan.cta}
+                </button>
+              )}
             </div>
           ))}
         </div>
@@ -199,24 +202,7 @@ export default function PricingPage() {
         </div>
       </main>
 
-      {/* Footer */}
-      <footer className="border-t border-gray-200 dark:border-gray-800 mt-20">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
-            <p className="text-sm text-gray-500 dark:text-gray-400">
-              © 2025 BigURL. All rights reserved.
-            </p>
-            <div className="flex gap-6 text-sm">
-              <Link href="/faq" className="text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400">
-                FAQ
-              </Link>
-              <Link href="/contact" className="text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400">
-                Contact
-              </Link>
-            </div>
-          </div>
-        </div>
-      </footer>
+      <Footer />
     </div>
   );
 }

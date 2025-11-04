@@ -6,6 +6,7 @@ import { generateUniqueCode, randomAlphaNum, parseUserAgent, getClientIp } from 
 import { LRUCache } from 'lru-cache';
 import { hashPassword, verifyPassword, generateToken, getUserFromContext, requireAuth } from './auth.js';
 import { sendWelcomeEmail, sendContactFormEmail } from './email.js';
+import { processPayment, createSubscription, type PaymentRequest } from './payment.js';
 
 const PORT = Number(process.env.PORT || 3000);
 const DB_PATH = process.env.DB_PATH || './data/links.db';
@@ -392,7 +393,71 @@ app.post('/api/links/bulk-update', async (c: Context) => {
   return c.json({ success: true, updated: ids.length });
 });
 
-// Subscription Management
+// Payment and Subscription Management
+
+app.post('/api/payment/process', async (c: Context) => {
+  // Require authentication
+  const authUser = await requireAuth(c);
+  if (authUser instanceof Response) return authUser;
+
+  try {
+    const body = await c.req.json();
+    const { packageType, payment, billingCycle } = body as {
+      packageType: 'basic' | 'pro';
+      payment: PaymentRequest;
+      billingCycle?: 'monthly' | 'yearly';
+    };
+
+    const user = db.getUserById(authUser.userId);
+    if (!user) {
+      return c.json({ error: 'User not found' }, 404);
+    }
+
+    // Determine amount based on package
+    const prices = { basic: 9, pro: 29 };
+    const amount = prices[packageType];
+
+    // Process payment
+    let result;
+    if (billingCycle === 'yearly') {
+      // Create subscription for recurring billing
+      result = await createSubscription(amount, 'monthly', payment);
+    } else {
+      // One-time payment
+      result = await processPayment({ ...payment, amount });
+    }
+
+    if (!result.success) {
+      return c.json({ 
+        error: 'Payment failed', 
+        details: result.errors?.join(', ')
+      }, 402);
+    }
+
+    // Record transaction
+    db.insertTransaction({
+      id: crypto.randomUUID(),
+      user_id: authUser.userId,
+      package: packageType,
+      amount,
+      transaction_id: result.transactionId!,
+      status: 'completed',
+      created_at: Date.now(),
+    });
+
+    // Upgrade user package
+    db.updateUserPackage(authUser.userId, packageType);
+
+    return c.json({
+      success: true,
+      transactionId: result.transactionId,
+      package: packageType,
+    });
+  } catch (error) {
+    console.error('Payment error:', error);
+    return c.json({ error: 'Payment processing failed' }, 500);
+  }
+});
 
 app.post('/api/user/upgrade', async (c: Context) => {
   // Require authentication
@@ -420,6 +485,13 @@ app.post('/api/user/upgrade', async (c: Context) => {
       error: `You have ${currentCount} active links. Please delete ${currentCount - newLimit} link(s) before downgrading to ${packageType}.`,
       currentCount,
       newLimit
+    }, 400);
+  }
+
+  // Only allow downgrades (upgrades require payment)
+  if (packageType !== 'free') {
+    return c.json({ 
+      error: 'Upgrades require payment. Please use the checkout process.',
     }, 400);
   }
 
