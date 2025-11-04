@@ -41,3 +41,4 @@ CREATE INDEX IF NOT EXISTS idx_clicked_at ON clicks(clicked_at);
 
 
 
+
