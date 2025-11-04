@@ -5,8 +5,8 @@ import { useRouter } from "next/navigation";
 import { getLinks } from "@/lib/api";
 import type { Link } from "@/types";
 import { LinksList } from "@/components/LinksList";
-import { ArrowLeft, Link as LinkIcon, RefreshCw, Settings, User } from "lucide-react";
-import NextLink from "next/link";
+import { ArrowLeft, Link as LinkIcon, RefreshCw, Settings } from "lucide-react";
+import Link from "next/link";
 
 interface UserData {
   id: string;
@@ -100,13 +100,13 @@ export default function DashboardPage() {
                 <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
                 <span className="text-sm font-medium hidden sm:inline">Refresh</span>
               </button>
-              <NextLink
+              <Link
                 href="/settings"
                 className="flex items-center gap-2 px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
               >
                 <Settings className="w-4 h-4" />
                 <span className="text-sm font-medium hidden sm:inline">Settings</span>
-              </NextLink>
+              </Link>
             </div>
           </div>
         </div>
