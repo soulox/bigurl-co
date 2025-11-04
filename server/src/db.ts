@@ -84,7 +84,6 @@ export class DataStore {
       );
       CREATE INDEX IF NOT EXISTS idx_short_code ON links(short_code);
       CREATE INDEX IF NOT EXISTS idx_created_at ON links(created_at);
-      CREATE INDEX IF NOT EXISTS idx_user_id ON links(user_id);
 
       CREATE TABLE IF NOT EXISTS clicks (
         id TEXT PRIMARY KEY,
@@ -163,6 +162,14 @@ export class DataStore {
         }
       } catch (error) {
         console.error('Failed to create anonymous user:', error);
+      }
+
+      // Now create the user_id index (after the column exists)
+      try {
+        this.db.exec('CREATE INDEX IF NOT EXISTS idx_user_id ON links(user_id)');
+        console.log('Created user_id index');
+      } catch (error) {
+        console.error('Failed to create user_id index:', error);
       }
     } catch (error) {
       console.error('Error in migrateLinksTable:', error);
