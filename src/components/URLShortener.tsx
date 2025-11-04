@@ -175,8 +175,28 @@ export function URLShortener() {
       
       {result && (
         <div className="mt-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
-          {/* @ts-expect-error - component is typed */}
-          {require("./ShortLinkCard").ShortLinkCard({ link: result })}
+          <div className="bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border-2 border-green-200 dark:border-green-800 rounded-2xl p-6 shadow-lg">
+            <div className="flex items-start gap-3 mb-4">
+              <div className="flex-shrink-0 w-10 h-10 bg-green-500 rounded-xl flex items-center justify-center">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6 text-white">
+                  <path d="M20 6 9 17l-5-5"/>
+                </svg>
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-sm font-medium text-green-800 dark:text-green-300 mb-1">
+                  Your short link is ready!
+                </h3>
+                <a 
+                  href={result.shortUrl} 
+                  target="_blank" 
+                  rel="noreferrer" 
+                  className="text-lg font-bold text-green-900 dark:text-green-200 hover:text-green-700 dark:hover:text-green-100 transition-colors flex items-center gap-2 group"
+                >
+                  <span className="truncate">{result.shortUrl}</span>
+                </a>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>
