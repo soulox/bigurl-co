@@ -20,13 +20,32 @@ export default function Home() {
                 <p className="text-xs text-gray-500 dark:text-gray-400">URL Shortener</p>
               </div>
             </div>
-            <Link
-              href="/dashboard"
-              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white rounded-lg transition-all shadow-md hover:shadow-lg transform hover:scale-105"
-            >
-              <LayoutDashboard className="w-4 h-4" />
-              <span className="font-medium">Dashboard</span>
-            </Link>
+            <div className="flex items-center gap-4">
+              <Link
+                href="/pricing"
+                className="text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors hidden sm:block"
+              >
+                Pricing
+              </Link>
+              <Link
+                href="/faq"
+                className="text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors hidden sm:block"
+              >
+                FAQ
+              </Link>
+              <Link
+                href="/auth/signin"
+                className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+              >
+                Sign In
+              </Link>
+              <Link
+                href="/auth/signin"
+                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white rounded-lg transition-all shadow-md hover:shadow-lg transform hover:scale-105"
+              >
+                <span className="font-medium">Get Started Free</span>
+              </Link>
+            </div>
           </div>
         </div>
       </header>
@@ -41,14 +60,36 @@ export default function Home() {
               Track Everything
             </span>
           </h2>
-          <p className="text-lg sm:text-xl text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">
+          <p className="text-lg sm:text-xl text-gray-600 dark:text-gray-400 max-w-2xl mx-auto mb-6">
             Create short, memorable links with powerful analytics, QR codes, and complete link management
           </p>
+          <div className="flex items-center justify-center gap-4 text-sm text-gray-600 dark:text-gray-400">
+            <span className="flex items-center gap-1">
+              <span className="w-2 h-2 bg-green-500 rounded-full"></span>
+              5 free links
+            </span>
+            <span>•</span>
+            <span>No credit card required</span>
+            <span>•</span>
+            <span>Upgrade anytime</span>
+          </div>
         </div>
 
         {/* URL Shortener Card */}
         <div className="mb-16">
           <URLShortener />
+        </div>
+
+        {/* CTA Section */}
+        <div className="text-center mb-16 p-8 bg-gradient-to-r from-blue-500 to-purple-600 rounded-2xl text-white">
+          <h3 className="text-2xl font-bold mb-2">Ready for more?</h3>
+          <p className="mb-4 opacity-90">Upgrade to get up to 100 links with advanced features</p>
+          <Link
+            href="/pricing"
+            className="inline-block px-6 py-3 bg-white text-blue-600 rounded-lg font-semibold hover:bg-gray-100 transition-all shadow-lg"
+          >
+            View Pricing
+          </Link>
         </div>
 
         {/* Features Grid */}
@@ -87,10 +128,23 @@ export default function Home() {
 
       {/* Footer */}
       <footer className="border-t border-gray-200 dark:border-gray-800 mt-20">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <p className="text-center text-sm text-gray-500 dark:text-gray-400">
-            Self-hosted URL shortener with complete control over your data
-          </p>
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              © 2025 BigURL. All rights reserved.
+            </p>
+            <div className="flex gap-6 text-sm">
+              <Link href="/pricing" className="text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400">
+                Pricing
+              </Link>
+              <Link href="/faq" className="text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400">
+                FAQ
+              </Link>
+              <Link href="/contact" className="text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400">
+                Contact
+              </Link>
+            </div>
+          </div>
         </div>
       </footer>
     </div>

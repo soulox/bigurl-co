@@ -1,17 +1,41 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { getLinks } from "@/lib/api";
 import type { Link } from "@/types";
 import { LinksList } from "@/components/LinksList";
-import { ArrowLeft, Link as LinkIcon, RefreshCw } from "lucide-react";
-import Link from "next/link";
+import { ArrowLeft, Link as LinkIcon, RefreshCw, Settings, User } from "lucide-react";
+import NextLink from "next/link";
+
+interface UserData {
+  id: string;
+  email: string;
+  name: string;
+  package: string;
+}
 
 export default function DashboardPage() {
   const [links, setLinks] = useState<Link[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [user, setUser] = useState<UserData | null>(null);
+  const router = useRouter();
+
+  useEffect(() => {
+    // Check authentication
+    const token = localStorage.getItem("auth_token");
+    const userData = localStorage.getItem("user");
+
+    if (!token || !userData) {
+      router.push("/auth/signin");
+      return;
+    }
+
+    setUser(JSON.parse(userData));
+    loadLinks();
+  }, [router]);
 
   const loadLinks = async (isRefresh = false) => {
     if (isRefresh) {
@@ -24,16 +48,19 @@ export default function DashboardPage() {
       const data = await getLinks();
       setLinks(data);
     } catch (err: any) {
+      if (err.message?.includes('Unauthorized') || err.message?.includes('401')) {
+        // Token expired or invalid
+        localStorage.removeItem("auth_token");
+        localStorage.removeItem("user");
+        router.push("/auth/signin");
+        return;
+      }
       setError(err.message || "Failed to load links");
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
   };
-
-  useEffect(() => {
-    loadLinks();
-  }, []);
 
   const totalClicks = links.reduce((sum, link) => sum + (link.click_count || 0), 0);
 
@@ -58,18 +85,29 @@ export default function DashboardPage() {
                   <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
                     Dashboard
                   </h1>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Manage your links</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    {user ? `${user.name || user.email} • ${user.package.toUpperCase()} Plan` : 'Manage your links'}
+                  </p>
                 </div>
               </div>
             </div>
-            <button
-              onClick={() => loadLinks(true)}
-              disabled={refreshing}
-              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white rounded-lg transition-all shadow-md hover:shadow-lg disabled:opacity-50"
-            >
-              <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
-              <span className="font-medium">Refresh</span>
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => loadLinks(true)}
+                disabled={refreshing}
+                className="flex items-center gap-2 px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors disabled:opacity-50"
+              >
+                <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+                <span className="text-sm font-medium hidden sm:inline">Refresh</span>
+              </button>
+              <NextLink
+                href="/settings"
+                className="flex items-center gap-2 px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+              >
+                <Settings className="w-4 h-4" />
+                <span className="text-sm font-medium hidden sm:inline">Settings</span>
+              </NextLink>
+            </div>
           </div>
         </div>
       </header>

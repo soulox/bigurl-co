@@ -4,8 +4,23 @@ export type ShortLink = {
   shortUrl: string;
 };
 
+export type User = {
+  id: string;
+  email: string;
+  name?: string;
+  package: 'free' | 'basic' | 'pro';
+  link_limit: number;
+  link_count: number;
+};
+
+export type AuthResponse = {
+  user: User;
+  token: string;
+};
+
 export type Link = {
   id: string;
+  user_id: string;
   short_code: string;
   original_url: string;
   title?: string;

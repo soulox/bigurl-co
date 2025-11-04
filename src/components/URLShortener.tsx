@@ -47,7 +47,11 @@ export function URLShortener() {
     } catch (err: any) {
       console.error("Failed to shorten URL:", err);
       // Better error messages
-      if (err?.message?.includes("409") || err?.message?.includes("already in use")) {
+      if (err?.message?.includes("Link limit reached") || err?.message?.includes("403")) {
+        setError("You've reached your link limit. Please upgrade your plan or delete some links.");
+      } else if (err?.message?.includes("Unauthorized") || err?.message?.includes("401")) {
+        setError("Please sign in to create short links.");
+      } else if (err?.message?.includes("409") || err?.message?.includes("already in use")) {
         setError("This custom slug is already taken. Try a different one.");
       } else if (err?.message?.includes("429")) {
         setError("Too many requests. Please slow down and try again.");

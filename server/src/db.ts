@@ -1,7 +1,21 @@
 import Database from 'better-sqlite3';
 
+export type UserRow = {
+  id: string;
+  email: string;
+  password_hash?: string | null;
+  google_id?: string | null;
+  name?: string | null;
+  created_at: number;
+  email_verified: number;
+  package: 'free' | 'basic' | 'pro';
+  link_limit: number;
+  link_count: number;
+};
+
 export type LinkRow = {
   id: string;
+  user_id: string;
   short_code: string;
   original_url: string;
   title?: string | null;
@@ -39,8 +53,24 @@ export class DataStore {
   private ensureSchema(): void {
     // Create tables if they don't exist
     this.db.exec(`
+      CREATE TABLE IF NOT EXISTS users (
+        id TEXT PRIMARY KEY,
+        email TEXT UNIQUE NOT NULL,
+        password_hash TEXT,
+        google_id TEXT UNIQUE,
+        name TEXT,
+        created_at INTEGER NOT NULL,
+        email_verified INTEGER DEFAULT 0,
+        package TEXT DEFAULT 'free' CHECK(package IN ('free', 'basic', 'pro')),
+        link_limit INTEGER DEFAULT 5,
+        link_count INTEGER DEFAULT 0
+      );
+      CREATE INDEX IF NOT EXISTS idx_email ON users(email);
+      CREATE INDEX IF NOT EXISTS idx_google_id ON users(google_id);
+
       CREATE TABLE IF NOT EXISTS links (
         id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
         short_code TEXT UNIQUE NOT NULL,
         original_url TEXT NOT NULL,
         title TEXT,
@@ -49,10 +79,12 @@ export class DataStore {
         expires_at INTEGER,
         max_clicks INTEGER,
         click_count INTEGER DEFAULT 0,
-        is_active INTEGER DEFAULT 1
+        is_active INTEGER DEFAULT 1,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
       );
       CREATE INDEX IF NOT EXISTS idx_short_code ON links(short_code);
       CREATE INDEX IF NOT EXISTS idx_created_at ON links(created_at);
+      CREATE INDEX IF NOT EXISTS idx_user_id ON links(user_id);
 
       CREATE TABLE IF NOT EXISTS clicks (
         id TEXT PRIMARY KEY,
@@ -72,8 +104,9 @@ export class DataStore {
       CREATE INDEX IF NOT EXISTS idx_clicked_at ON clicks(clicked_at);
     `);
 
-    // Migrate existing links table to add new columns if they don't exist
+    // Migrate existing tables to add new columns if they don't exist
     this.migrateLinksTable();
+    this.migrateUsersTable();
   }
 
   private migrateLinksTable(): void {
@@ -83,6 +116,7 @@ export class DataStore {
 
     // Add missing columns
     const columnsToAdd = [
+      { name: 'user_id', type: 'TEXT' },
       { name: 'title', type: 'TEXT' },
       { name: 'description', type: 'TEXT' },
       { name: 'expires_at', type: 'INTEGER' },
@@ -99,13 +133,52 @@ export class DataStore {
 
     // Update click_count to 0 for existing rows where it's NULL
     this.db.exec(`UPDATE links SET click_count = 0 WHERE click_count IS NULL`);
+    
+    // Create a default "anonymous" user for existing links without user_id
+    const hasUserIdNull = this.db.prepare(`SELECT COUNT(*) as count FROM links WHERE user_id IS NULL`).get() as { count: number };
+    if (hasUserIdNull.count > 0) {
+      const anonymousUserId = 'anonymous-user';
+      const existingAnonymous = this.db.prepare('SELECT id FROM users WHERE id = ?').get(anonymousUserId);
+      if (!existingAnonymous) {
+        this.db.prepare(`
+          INSERT INTO users (id, email, name, created_at, package, link_limit, link_count)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+        `).run(anonymousUserId, 'anonymous@bigurl.co', 'Anonymous User', Date.now(), 'pro', 999999, 0);
+      }
+      this.db.exec(`UPDATE links SET user_id = '${anonymousUserId}' WHERE user_id IS NULL`);
+    }
+  }
+
+  private migrateUsersTable(): void {
+    // Check if users table exists
+    const tableInfo = this.db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='users'").get();
+    if (!tableInfo) return;
+
+    const columns = this.db.prepare("PRAGMA table_info(users)").all() as Array<{ name: string }>;
+    const columnNames = columns.map(col => col.name);
+
+    const columnsToAdd = [
+      { name: 'package', type: "TEXT DEFAULT 'free'" },
+      { name: 'link_limit', type: 'INTEGER DEFAULT 5' },
+      { name: 'link_count', type: 'INTEGER DEFAULT 0' }
+    ];
+
+    for (const col of columnsToAdd) {
+      if (!columnNames.includes(col.name)) {
+        console.log(`Adding column ${col.name} to users table...`);
+        this.db.exec(`ALTER TABLE users ADD COLUMN ${col.name} ${col.type}`);
+      }
+    }
   }
 
   insertLink(row: LinkRow): void {
     const stmt = this.db.prepare(
-      'INSERT INTO links (id, short_code, original_url, title, description, created_at, expires_at, max_clicks, is_active) VALUES (@id, @short_code, @original_url, @title, @description, @created_at, @expires_at, @max_clicks, @is_active)'
+      'INSERT INTO links (id, user_id, short_code, original_url, title, description, created_at, expires_at, max_clicks, is_active) VALUES (@id, @user_id, @short_code, @original_url, @title, @description, @created_at, @expires_at, @max_clicks, @is_active)'
     );
     stmt.run(row);
+    
+    // Update user's link count
+    this.db.prepare('UPDATE users SET link_count = link_count + 1 WHERE id = ?').run(row.user_id);
   }
 
   getLinkByCode(code: string): any {
@@ -151,11 +224,19 @@ export class DataStore {
     stmt.run(row);
   }
 
-  getAllLinks(limit = 100): any[] {
-    const stmt = this.db.prepare(
-      'SELECT id, short_code, original_url, title, description, created_at, expires_at, max_clicks, click_count, is_active FROM links ORDER BY created_at DESC LIMIT ?'
-    );
-    return stmt.all(limit);
+  getAllLinks(userId?: string, limit = 100): any[] {
+    if (userId) {
+      const stmt = this.db.prepare(
+        'SELECT id, user_id, short_code, original_url, title, description, created_at, expires_at, max_clicks, click_count, is_active FROM links WHERE user_id = ? ORDER BY created_at DESC LIMIT ?'
+      );
+      return stmt.all(userId, limit);
+    } else {
+      // For backward compatibility (admin view or migration)
+      const stmt = this.db.prepare(
+        'SELECT id, user_id, short_code, original_url, title, description, created_at, expires_at, max_clicks, click_count, is_active FROM links ORDER BY created_at DESC LIMIT ?'
+      );
+      return stmt.all(limit);
+    }
   }
 
   getLinkById(id: string): any {
@@ -200,20 +281,38 @@ export class DataStore {
   }
 
   deleteLink(id: string): void {
+    // Get user_id before deleting
+    const link = this.getLinkById(id) as { user_id?: string } | undefined;
+    
     const stmtClicks = this.db.prepare('DELETE FROM clicks WHERE link_id = ?');
     const stmtLink = this.db.prepare('DELETE FROM links WHERE id = ?');
     
     stmtClicks.run(id);
     stmtLink.run(id);
+    
+    // Update user's link count if link existed
+    if (link?.user_id) {
+      const count = this.getUserLinkCount(link.user_id);
+      this.db.prepare('UPDATE users SET link_count = ? WHERE id = ?').run(count, link.user_id);
+    }
   }
 
   bulkDeleteLinks(ids: string[]): void {
+    // Get user IDs before deleting
     const placeholders = ids.map(() => '?').join(',');
+    const userIds = this.db.prepare(`SELECT DISTINCT user_id FROM links WHERE id IN (${placeholders})`).all(...ids) as { user_id: string }[];
+    
     const stmtClicks = this.db.prepare(`DELETE FROM clicks WHERE link_id IN (${placeholders})`);
     const stmtLinks = this.db.prepare(`DELETE FROM links WHERE id IN (${placeholders})`);
     
     stmtClicks.run(...ids);
     stmtLinks.run(...ids);
+    
+    // Update link counts for affected users
+    userIds.forEach(({ user_id }) => {
+      const count = this.getUserLinkCount(user_id);
+      this.db.prepare('UPDATE users SET link_count = ? WHERE id = ?').run(count, user_id);
+    });
   }
 
   bulkUpdateLinks(ids: string[], updates: { is_active?: number }): void {
@@ -288,6 +387,80 @@ export class DataStore {
     const stmt = this.db.prepare(`SELECT short_code FROM links WHERE id IN (${placeholders})`);
     const rows = stmt.all(...ids) as { short_code: string }[];
     return rows.map(r => r.short_code);
+  }
+
+  // User Management Methods
+  
+  createUser(user: UserRow): void {
+    const stmt = this.db.prepare(`
+      INSERT INTO users (id, email, password_hash, google_id, name, created_at, email_verified, package, link_limit, link_count)
+      VALUES (@id, @email, @password_hash, @google_id, @name, @created_at, @email_verified, @package, @link_limit, @link_count)
+    `);
+    stmt.run(user);
+  }
+
+  getUserByEmail(email: string): UserRow | undefined {
+    const stmt = this.db.prepare('SELECT * FROM users WHERE email = ?');
+    return stmt.get(email) as UserRow | undefined;
+  }
+
+  getUserById(id: string): UserRow | undefined {
+    const stmt = this.db.prepare('SELECT * FROM users WHERE id = ?');
+    return stmt.get(id) as UserRow | undefined;
+  }
+
+  getUserByGoogleId(googleId: string): UserRow | undefined {
+    const stmt = this.db.prepare('SELECT * FROM users WHERE google_id = ?');
+    return stmt.get(googleId) as UserRow | undefined;
+  }
+
+  updateUser(id: string, updates: Partial<UserRow>): void {
+    const allowedFields = ['name', 'password_hash', 'email_verified', 'package', 'link_limit'];
+    const fields = Object.keys(updates).filter(k => allowedFields.includes(k));
+    
+    if (fields.length === 0) return;
+
+    const setClause = fields.map(f => `${f} = @${f}`).join(', ');
+    const stmt = this.db.prepare(`UPDATE users SET ${setClause} WHERE id = @id`);
+    stmt.run({ ...updates, id });
+  }
+
+  updateUserPackage(userId: string, packageType: 'free' | 'basic' | 'pro'): void {
+    const limits = { free: 5, basic: 20, pro: 100 };
+    const stmt = this.db.prepare('UPDATE users SET package = ?, link_limit = ? WHERE id = ?');
+    stmt.run(packageType, limits[packageType], userId);
+  }
+
+  getUserLinkCount(userId: string): number {
+    const stmt = this.db.prepare('SELECT COUNT(*) as count FROM links WHERE user_id = ? AND is_active = 1');
+    const result = stmt.get(userId) as { count: number } | undefined;
+    return result?.count || 0;
+  }
+
+  canUserCreateLink(userId: string): boolean {
+    const user = this.getUserById(userId);
+    if (!user) return false;
+    const linkCount = this.getUserLinkCount(userId);
+    return linkCount < user.link_limit;
+  }
+
+  verifyUserEmail(userId: string): void {
+    this.db.prepare('UPDATE users SET email_verified = 1 WHERE id = ?').run(userId);
+  }
+
+  // Link Ownership Verification
+  
+  userOwnsLink(userId: string, linkId: string): boolean {
+    const stmt = this.db.prepare('SELECT user_id FROM links WHERE id = ?');
+    const link = stmt.get(linkId) as { user_id: string } | undefined;
+    return link?.user_id === userId;
+  }
+
+  userOwnsLinks(userId: string, linkIds: string[]): boolean {
+    const placeholders = linkIds.map(() => '?').join(',');
+    const stmt = this.db.prepare(`SELECT COUNT(*) as count FROM links WHERE id IN (${placeholders}) AND user_id = ?`);
+    const result = stmt.get(...linkIds, userId) as { count: number };
+    return result.count === linkIds.length;
   }
 }
 
