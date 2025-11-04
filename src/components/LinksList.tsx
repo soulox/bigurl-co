@@ -5,6 +5,12 @@ import type { Link } from "@/types";
 import { deleteLink, bulkDeleteLinks, bulkUpdateLinks } from "@/lib/api";
 import { Trash2, Edit, BarChart3, QrCode, ExternalLink } from "lucide-react";
 import { QRCodeModal } from "./QRCodeModal";
+import ConfirmDialog from "./ConfirmDialog";
+
+type ConfirmAction = 
+  | { type: "delete"; id: string }
+  | { type: "bulk-delete"; count: number }
+  | { type: "bulk-deactivate"; count: number };
 
 export function LinksList({
   links,
@@ -16,6 +22,7 @@ export function LinksList({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showQR, setShowQR] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
 
   const toggleSelect = (id: string) => {
     const newSet = new Set(selectedIds);
@@ -35,42 +42,69 @@ export function LinksList({
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this link?")) return;
-    try {
-      await deleteLink(id);
-      onUpdate();
-    } catch (error) {
-      alert("Failed to delete link");
-    }
+  const handleDelete = (id: string) => {
+    setConfirmAction({ type: "delete", id });
   };
 
-  const handleBulkDelete = async () => {
+  const handleBulkDelete = () => {
     if (selectedIds.size === 0) return;
-    if (!confirm(`Delete ${selectedIds.size} selected link(s)?`)) return;
+    setConfirmAction({ type: "bulk-delete", count: selectedIds.size });
+  };
+
+  const handleBulkDeactivate = () => {
+    if (selectedIds.size === 0) return;
+    setConfirmAction({ type: "bulk-deactivate", count: selectedIds.size });
+  };
+
+  const executeConfirmedAction = async () => {
+    if (!confirmAction) return;
+
     setDeleting(true);
     try {
-      await bulkDeleteLinks(Array.from(selectedIds));
-      setSelectedIds(new Set());
-      onUpdate();
+      if (confirmAction.type === "delete") {
+        await deleteLink(confirmAction.id);
+        onUpdate();
+      } else if (confirmAction.type === "bulk-delete") {
+        await bulkDeleteLinks(Array.from(selectedIds));
+        setSelectedIds(new Set());
+        onUpdate();
+      } else if (confirmAction.type === "bulk-deactivate") {
+        await bulkUpdateLinks(Array.from(selectedIds), { is_active: false });
+        setSelectedIds(new Set());
+        onUpdate();
+      }
     } catch (error) {
-      alert("Failed to delete links");
+      alert(`Failed to ${confirmAction.type.replace("-", " ")}`);
     } finally {
       setDeleting(false);
     }
   };
 
-  const handleBulkDeactivate = async () => {
-    if (selectedIds.size === 0) return;
-    setDeleting(true);
-    try {
-      await bulkUpdateLinks(Array.from(selectedIds), { is_active: false });
-      setSelectedIds(new Set());
-      onUpdate();
-    } catch (error) {
-      alert("Failed to deactivate links");
-    } finally {
-      setDeleting(false);
+  const getConfirmDialogProps = () => {
+    if (!confirmAction) return null;
+
+    switch (confirmAction.type) {
+      case "delete":
+        return {
+          title: "Delete Link",
+          message: "Are you sure you want to delete this link? This action cannot be undone.",
+          confirmText: "Delete",
+          variant: "danger" as const,
+        };
+      case "bulk-delete":
+        return {
+          title: "Delete Multiple Links",
+          message: `Are you sure you want to delete ${confirmAction.count} selected link(s)? This action cannot be undone.`,
+          confirmText: `Delete ${confirmAction.count} Link${confirmAction.count > 1 ? "s" : ""}`,
+          variant: "danger" as const,
+        };
+      case "bulk-deactivate":
+        return {
+          title: "Deactivate Multiple Links",
+          message: `Are you sure you want to deactivate ${confirmAction.count} selected link(s)?`,
+          confirmText: `Deactivate ${confirmAction.count} Link${confirmAction.count > 1 ? "s" : ""}`,
+          variant: "warning" as const,
+        };
     }
   };
 
@@ -233,6 +267,15 @@ export function LinksList({
 
       {showQR && (
         <QRCodeModal shortUrl={showQR} onClose={() => setShowQR(null)} />
+      )}
+
+      {confirmAction && getConfirmDialogProps() && (
+        <ConfirmDialog
+          isOpen={true}
+          onClose={() => setConfirmAction(null)}
+          onConfirm={executeConfirmedAction}
+          {...getConfirmDialogProps()!}
+        />
       )}
     </>
   );
