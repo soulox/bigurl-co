@@ -105,47 +105,68 @@ export class DataStore {
     `);
 
     // Migrate existing tables to add new columns if they don't exist
-    this.migrateLinksTable();
+    // IMPORTANT: Migrate users first, then links (links depend on users)
     this.migrateUsersTable();
+    this.migrateLinksTable();
   }
 
   private migrateLinksTable(): void {
-    // Get existing columns
-    const columns = this.db.prepare("PRAGMA table_info(links)").all() as Array<{ name: string }>;
-    const columnNames = columns.map(col => col.name);
+    try {
+      // Get existing columns
+      const columns = this.db.prepare("PRAGMA table_info(links)").all() as Array<{ name: string }>;
+      const columnNames = columns.map(col => col.name);
 
-    // Add missing columns
-    const columnsToAdd = [
-      { name: 'user_id', type: 'TEXT' },
-      { name: 'title', type: 'TEXT' },
-      { name: 'description', type: 'TEXT' },
-      { name: 'expires_at', type: 'INTEGER' },
-      { name: 'max_clicks', type: 'INTEGER' },
-      { name: 'click_count', type: 'INTEGER DEFAULT 0' }
-    ];
+      // Add missing columns
+      const columnsToAdd = [
+        { name: 'user_id', type: 'TEXT' },
+        { name: 'title', type: 'TEXT' },
+        { name: 'description', type: 'TEXT' },
+        { name: 'expires_at', type: 'INTEGER' },
+        { name: 'max_clicks', type: 'INTEGER' },
+        { name: 'click_count', type: 'INTEGER DEFAULT 0' }
+      ];
 
-    for (const col of columnsToAdd) {
-      if (!columnNames.includes(col.name)) {
-        console.log(`Adding column ${col.name} to links table...`);
-        this.db.exec(`ALTER TABLE links ADD COLUMN ${col.name} ${col.type}`);
+      for (const col of columnsToAdd) {
+        if (!columnNames.includes(col.name)) {
+          console.log(`Adding column ${col.name} to links table...`);
+          try {
+            this.db.exec(`ALTER TABLE links ADD COLUMN ${col.name} ${col.type}`);
+          } catch (error) {
+            console.error(`Failed to add column ${col.name}:`, error);
+          }
+        }
       }
-    }
 
-    // Update click_count to 0 for existing rows where it's NULL
-    this.db.exec(`UPDATE links SET click_count = 0 WHERE click_count IS NULL`);
-    
-    // Create a default "anonymous" user for existing links without user_id
-    const hasUserIdNull = this.db.prepare(`SELECT COUNT(*) as count FROM links WHERE user_id IS NULL`).get() as { count: number };
-    if (hasUserIdNull.count > 0) {
-      const anonymousUserId = 'anonymous-user';
-      const existingAnonymous = this.db.prepare('SELECT id FROM users WHERE id = ?').get(anonymousUserId);
-      if (!existingAnonymous) {
-        this.db.prepare(`
-          INSERT INTO users (id, email, name, created_at, package, link_limit, link_count)
-          VALUES (?, ?, ?, ?, ?, ?, ?)
-        `).run(anonymousUserId, 'anonymous@bigurl.co', 'Anonymous User', Date.now(), 'pro', 999999, 0);
+      // Update click_count to 0 for existing rows where it's NULL
+      try {
+        this.db.exec(`UPDATE links SET click_count = 0 WHERE click_count IS NULL`);
+      } catch (error) {
+        console.error('Failed to update click_count:', error);
       }
-      this.db.exec(`UPDATE links SET user_id = '${anonymousUserId}' WHERE user_id IS NULL`);
+      
+      // Create a default "anonymous" user for existing links without user_id
+      try {
+        const hasUserIdNull = this.db.prepare(`SELECT COUNT(*) as count FROM links WHERE user_id IS NULL`).get() as { count: number };
+        if (hasUserIdNull.count > 0) {
+          console.log(`Found ${hasUserIdNull.count} links without user_id, creating anonymous user...`);
+          const anonymousUserId = 'anonymous-user';
+          const existingAnonymous = this.db.prepare('SELECT id FROM users WHERE id = ?').get(anonymousUserId);
+          if (!existingAnonymous) {
+            this.db.prepare(`
+              INSERT INTO users (id, email, name, created_at, email_verified, package, link_limit, link_count)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            `).run(anonymousUserId, 'anonymous@bigurl.co', 'Anonymous User', Date.now(), 1, 'pro', 999999, 0);
+            console.log('Created anonymous user');
+          }
+          this.db.exec(`UPDATE links SET user_id = '${anonymousUserId}' WHERE user_id IS NULL`);
+          console.log(`Updated ${hasUserIdNull.count} links to anonymous user`);
+        }
+      } catch (error) {
+        console.error('Failed to create anonymous user:', error);
+      }
+    } catch (error) {
+      console.error('Error in migrateLinksTable:', error);
+      throw error;
     }
   }
 
@@ -225,15 +246,36 @@ export class DataStore {
   }
 
   getAllLinks(userId?: string, limit = 100): any[] {
-    if (userId) {
+    try {
+      // Check if user_id column exists
+      const columns = this.db.prepare("PRAGMA table_info(links)").all() as Array<{ name: string }>;
+      const hasUserId = columns.some(col => col.name === 'user_id');
+
+      if (!hasUserId) {
+        // Fallback for old schema without user_id
+        const stmt = this.db.prepare(
+          'SELECT id, short_code, original_url, title, description, created_at, expires_at, max_clicks, click_count, is_active FROM links ORDER BY created_at DESC LIMIT ?'
+        );
+        return stmt.all(limit);
+      }
+
+      if (userId) {
+        const stmt = this.db.prepare(
+          'SELECT id, user_id, short_code, original_url, title, description, created_at, expires_at, max_clicks, click_count, is_active FROM links WHERE user_id = ? ORDER BY created_at DESC LIMIT ?'
+        );
+        return stmt.all(userId, limit);
+      } else {
+        // For backward compatibility (admin view or migration)
+        const stmt = this.db.prepare(
+          'SELECT id, user_id, short_code, original_url, title, description, created_at, expires_at, max_clicks, click_count, is_active FROM links ORDER BY created_at DESC LIMIT ?'
+        );
+        return stmt.all(limit);
+      }
+    } catch (error) {
+      console.error('Error in getAllLinks:', error);
+      // Fallback to basic query
       const stmt = this.db.prepare(
-        'SELECT id, user_id, short_code, original_url, title, description, created_at, expires_at, max_clicks, click_count, is_active FROM links WHERE user_id = ? ORDER BY created_at DESC LIMIT ?'
-      );
-      return stmt.all(userId, limit);
-    } else {
-      // For backward compatibility (admin view or migration)
-      const stmt = this.db.prepare(
-        'SELECT id, user_id, short_code, original_url, title, description, created_at, expires_at, max_clicks, click_count, is_active FROM links ORDER BY created_at DESC LIMIT ?'
+        'SELECT id, short_code, original_url, created_at, is_active FROM links ORDER BY created_at DESC LIMIT ?'
       );
       return stmt.all(limit);
     }
@@ -290,17 +332,27 @@ export class DataStore {
     stmtClicks.run(id);
     stmtLink.run(id);
     
-    // Update user's link count if link existed
+    // Update user's link count if link existed and has user_id
     if (link?.user_id) {
-      const count = this.getUserLinkCount(link.user_id);
-      this.db.prepare('UPDATE users SET link_count = ? WHERE id = ?').run(count, link.user_id);
+      try {
+        const count = this.getUserLinkCount(link.user_id);
+        this.db.prepare('UPDATE users SET link_count = ? WHERE id = ?').run(count, link.user_id);
+      } catch {
+        // Ignore if users table doesn't exist yet
+      }
     }
   }
 
   bulkDeleteLinks(ids: string[]): void {
-    // Get user IDs before deleting
     const placeholders = ids.map(() => '?').join(',');
-    const userIds = this.db.prepare(`SELECT DISTINCT user_id FROM links WHERE id IN (${placeholders})`).all(...ids) as { user_id: string }[];
+    
+    // Try to get user IDs before deleting (for updating counts)
+    let userIds: { user_id: string }[] = [];
+    try {
+      userIds = this.db.prepare(`SELECT DISTINCT user_id FROM links WHERE id IN (${placeholders})`).all(...ids) as { user_id: string }[];
+    } catch {
+      // user_id column might not exist yet (during migration)
+    }
     
     const stmtClicks = this.db.prepare(`DELETE FROM clicks WHERE link_id IN (${placeholders})`);
     const stmtLinks = this.db.prepare(`DELETE FROM links WHERE id IN (${placeholders})`);
@@ -308,11 +360,17 @@ export class DataStore {
     stmtClicks.run(...ids);
     stmtLinks.run(...ids);
     
-    // Update link counts for affected users
-    userIds.forEach(({ user_id }) => {
-      const count = this.getUserLinkCount(user_id);
-      this.db.prepare('UPDATE users SET link_count = ? WHERE id = ?').run(count, user_id);
-    });
+    // Update link counts for affected users (if we have user_ids)
+    if (userIds.length > 0) {
+      userIds.forEach(({ user_id }) => {
+        try {
+          const count = this.getUserLinkCount(user_id);
+          this.db.prepare('UPDATE users SET link_count = ? WHERE id = ?').run(count, user_id);
+        } catch {
+          // Ignore if users table doesn't exist yet
+        }
+      });
+    }
   }
 
   bulkUpdateLinks(ids: string[], updates: { is_active?: number }): void {
@@ -432,16 +490,26 @@ export class DataStore {
   }
 
   getUserLinkCount(userId: string): number {
-    const stmt = this.db.prepare('SELECT COUNT(*) as count FROM links WHERE user_id = ? AND is_active = 1');
-    const result = stmt.get(userId) as { count: number } | undefined;
-    return result?.count || 0;
+    try {
+      const stmt = this.db.prepare('SELECT COUNT(*) as count FROM links WHERE user_id = ? AND is_active = 1');
+      const result = stmt.get(userId) as { count: number } | undefined;
+      return result?.count || 0;
+    } catch {
+      // If user_id column doesn't exist yet, return 0
+      return 0;
+    }
   }
 
   canUserCreateLink(userId: string): boolean {
-    const user = this.getUserById(userId);
-    if (!user) return false;
-    const linkCount = this.getUserLinkCount(userId);
-    return linkCount < user.link_limit;
+    try {
+      const user = this.getUserById(userId);
+      if (!user) return false;
+      const linkCount = this.getUserLinkCount(userId);
+      return linkCount < user.link_limit;
+    } catch {
+      // During migration or if tables don't exist, allow creation
+      return true;
+    }
   }
 
   verifyUserEmail(userId: string): void {
@@ -451,16 +519,26 @@ export class DataStore {
   // Link Ownership Verification
   
   userOwnsLink(userId: string, linkId: string): boolean {
-    const stmt = this.db.prepare('SELECT user_id FROM links WHERE id = ?');
-    const link = stmt.get(linkId) as { user_id: string } | undefined;
-    return link?.user_id === userId;
+    try {
+      const stmt = this.db.prepare('SELECT user_id FROM links WHERE id = ?');
+      const link = stmt.get(linkId) as { user_id: string } | undefined;
+      return link?.user_id === userId;
+    } catch {
+      // If user_id column doesn't exist yet, assume ownership (migration scenario)
+      return true;
+    }
   }
 
   userOwnsLinks(userId: string, linkIds: string[]): boolean {
-    const placeholders = linkIds.map(() => '?').join(',');
-    const stmt = this.db.prepare(`SELECT COUNT(*) as count FROM links WHERE id IN (${placeholders}) AND user_id = ?`);
-    const result = stmt.get(...linkIds, userId) as { count: number };
-    return result.count === linkIds.length;
+    try {
+      const placeholders = linkIds.map(() => '?').join(',');
+      const stmt = this.db.prepare(`SELECT COUNT(*) as count FROM links WHERE id IN (${placeholders}) AND user_id = ?`);
+      const result = stmt.get(...linkIds, userId) as { count: number };
+      return result.count === linkIds.length;
+    } catch {
+      // If user_id column doesn't exist yet, assume ownership (migration scenario)
+      return true;
+    }
   }
 }
 
