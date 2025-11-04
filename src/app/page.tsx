@@ -40,7 +40,7 @@ export default function Home() {
                 Sign In
               </Link>
               <Link
-                href="/auth/signin"
+                href="/auth/signin?mode=signup"
                 className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white rounded-lg transition-all shadow-md hover:shadow-lg transform hover:scale-105"
               >
                 <span className="font-medium">Get Started Free</span>

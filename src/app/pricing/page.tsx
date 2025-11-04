@@ -160,7 +160,7 @@ export default function PricingPage() {
               </ul>
 
               <Link
-                href="/auth/signin"
+                href="/auth/signin?mode=signup"
                 className={`block w-full py-3 rounded-lg font-semibold text-center transition-all shadow-lg hover:shadow-xl transform hover:scale-105 ${
                   plan.popular
                     ? "bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white"
